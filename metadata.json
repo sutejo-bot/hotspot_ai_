@@ -1,0 +1,8 @@
+{
+  "name": "Remix Peta Hotspot di Area Adaro Indonesia",
+  "description": "Sistem pemantauan dan peta sebaran hotspot anomali termal di area PT Adaro Indonesia mencakup wilayah IUPK Produksi, Wilayah Penunjang, dan koridor operasional.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

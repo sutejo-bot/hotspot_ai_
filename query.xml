@@ -1,0 +1,7 @@
+<osm-script output="json" timeout="25">
+  <query type="way">
+    <bbox-query s="-2.3" w="114.8" n="-2.1" e="115.6"/>
+    <has-kv k="highway"/>
+  </query>
+  <print mode="tags"/>
+</osm-script>
