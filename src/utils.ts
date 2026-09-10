@@ -140,7 +140,13 @@ export function fetchAddressFromCoordinates(lat: number, lng: number): Promise<s
             }
           }
           if (kec) parts.push(`Kec. ${kec}`);
-          if (kab) parts.push(`${kab}`);
+          if (kab) {
+            if (kab.toLowerCase().includes('kabupaten') || kab.toLowerCase().includes('kota')) {
+               parts.push(`${kab}`);
+            } else {
+               parts.push(`Kab. ${kab}`);
+            }
+          }
           if (state) parts.push(`${state}`);
           
           if (parts.length > 0) {
