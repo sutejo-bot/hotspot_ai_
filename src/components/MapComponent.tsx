@@ -1,7 +1,8 @@
 import { useMemo, useEffect, useState, useRef, MutableRefObject } from "react";
 import { 
   MapContainer, 
-  TileLayer, 
+  TileLayer,
+  WMSTileLayer,
   Polygon, 
   Polyline,
   Marker, 
@@ -236,6 +237,7 @@ export default function MapComponent({
   const [showMilestones, setShowMilestones] = useState(true);
   const [showBuffer, setShowBuffer] = useState(true);
   const [showHotspots, setShowHotspots] = useState(true);
+  const [showAdmin, setShowAdmin] = useState(true);
   const [mapType, setMapType] = useState<"street" | "satellite">("street");
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const [alertDismissed, setAlertDismissed] = useState(false);
@@ -312,9 +314,42 @@ export default function MapComponent({
               attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             />
-            {/* Esri Reference overlay for boundaries and place names */}
+            {/* CartoDB Voyager Label overlay for highly detailed OSM Indonesian village names */}
             <TileLayer
-              url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+              attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
+              url="https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+            />
+          </>
+        )}
+
+        {/* WMS Layer for Official Administrative Boundaries (BIG) */}
+        {showAdmin && (
+          <>
+            {/* Base borders (Provinsi, Kabupaten, Kecamatan) - Faster to render */}
+            <WMSTileLayer
+              url="https://geoservices.big.go.id/r/batas_wilayah/wms"
+              layers="Batas_Provinsi,Batas_Kabupaten_Kota,Batas_Kecamatan"
+              format="image/png"
+              transparent={true}
+              opacity={0.8}
+              attribution="Badan Informasi Geospasial (BIG)"
+              // @ts-ignore - tiled is passed to Leaflet WMS params
+              tiled={true}
+              updateWhenIdle={true}
+              updateWhenZooming={false}
+            />
+            {/* Village borders (Desa) - Heavy to render, only load when zoomed in */}
+            <WMSTileLayer
+              url="https://geoservices.big.go.id/r/batas_wilayah/wms"
+              layers="Batas_Desa"
+              format="image/png"
+              transparent={true}
+              opacity={0.7}
+              // @ts-ignore
+              tiled={true}
+              updateWhenIdle={true}
+              updateWhenZooming={false}
+              minZoom={12}
             />
           </>
         )}
@@ -324,9 +359,9 @@ export default function MapComponent({
           <Polygon 
             positions={iupkMultiPolygons} 
             pathOptions={{
-              fillColor: "#0f172a",
+              fillColor: "#000000",
               fillOpacity: 0.05,
-              color: "#0f172a",
+              color: "#000000",
               weight: 2.5,
               dashArray: "6, 4",
             }} 
@@ -343,9 +378,9 @@ export default function MapComponent({
             <Polygon 
               positions={bufferMultiPolygons} 
               pathOptions={{
-                fillColor: "#f59e0b",
+                fillColor: "#eab308",
                 fillOpacity: 0.06,
-                color: "#d97706",
+                color: "#ca8a04",
                 weight: 1.5,
                 dashArray: "3, 3",
                 interactive: false
@@ -355,9 +390,9 @@ export default function MapComponent({
               <Polygon 
                 positions={haulRoadBufferMultiPolygons} 
                 pathOptions={{
-                  fillColor: "#f59e0b",
+                  fillColor: "#eab308",
                   fillOpacity: 0.05,
-                  color: "#d97706",
+                  color: "#ca8a04",
                   weight: 1.2,
                   dashArray: "3, 3",
                   interactive: false
@@ -374,7 +409,7 @@ export default function MapComponent({
             <Polyline
               positions={ADARO_HAUL_ROAD_COORDINATES}
               pathOptions={{
-                color: "#1e293b",
+                color: "#475569",
                 weight: 6,
                 opacity: 0.85
               }}
@@ -383,7 +418,7 @@ export default function MapComponent({
             <Polyline
               positions={ADARO_HAUL_ROAD_COORDINATES}
               pathOptions={{
-                color: "#f59e0b",
+                color: "#94a3b8",
                 weight: 3.5,
                 opacity: 1
               }}
@@ -609,7 +644,7 @@ export default function MapComponent({
                     className="accent-blue-500 w-4 h-4 rounded cursor-pointer" 
                   /> 
                   <span className="flex items-center gap-2">
-                    <span className="w-3 h-0.5 bg-slate-200 border-b border-dashed border-white inline-block"></span>
+                    <span className="w-4 h-0.5 bg-black inline-block"></span>
                     Batas IUPK Produksi AI (ESDM)
                   </span>
                 </label>
@@ -622,7 +657,7 @@ export default function MapComponent({
                     className="accent-amber-500 w-4 h-4 rounded cursor-pointer" 
                   /> 
                   <span className="flex items-center gap-2">
-                    <span className="w-3 h-1 rounded-sm bg-amber-500 inline-block"></span>
+                    <span className="w-4 h-1 rounded-sm bg-slate-400 inline-block"></span>
                     Jalan Hauling (KM 0 - KM 71)
                   </span>
                 </label>
@@ -650,8 +685,21 @@ export default function MapComponent({
                     className="accent-amber-500 w-4 h-4 rounded cursor-pointer" 
                   /> 
                   <span className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500/60 inline-block"></span>
+                    <span className="w-3 h-3 rounded-full bg-yellow-400/80 inline-block"></span>
                     Buffer Zone 1 Km
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={showAdmin} 
+                    onChange={(e) => setShowAdmin(e.target.checked)} 
+                    className="accent-slate-500 w-4 h-4 rounded cursor-pointer" 
+                  /> 
+                  <span className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-sm border-2 border-white inline-block"></span>
+                    Batas Wilayah Administrasi (BIG)
                   </span>
                 </label>
 

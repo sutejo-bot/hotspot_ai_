@@ -124,10 +124,10 @@ export function fetchAddressFromCoordinates(lat: number, lng: number): Promise<s
         const data = await response.json();
         
         if (data && data.address) {
-          const { village, hamlet, suburb, quarter, residential, industrial, town, city_district, city, county, state } = data.address;
+          const { village, hamlet, suburb, quarter, town, city_district, city, county, state } = data.address;
           
           const parts = [];
-          const ds = village || hamlet || suburb || quarter || residential || industrial || town;
+          const ds = village || hamlet || suburb || quarter || town;
           const kec = city_district || city;
           const kab = county;
           
