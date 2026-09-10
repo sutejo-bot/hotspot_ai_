@@ -307,10 +307,16 @@ export default function MapComponent({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
         ) : (
-          <TileLayer
-            attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          />
+          <>
+            <TileLayer
+              attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            />
+            {/* Esri Reference overlay for boundaries and place names */}
+            <TileLayer
+              url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+            />
+          </>
         )}
 
         {/* 1. Main IUPK Concession Boundary (ESDM GeoJSON) */}

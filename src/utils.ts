@@ -124,14 +124,21 @@ export function fetchAddressFromCoordinates(lat: number, lng: number): Promise<s
         const data = await response.json();
         
         if (data && data.address) {
-          const { village, town, city_district, county, state, city } = data.address;
+          const { village, hamlet, suburb, quarter, residential, industrial, town, city_district, city, county, state } = data.address;
           
           const parts = [];
-          const ds = village || town;
+          const ds = village || hamlet || suburb || quarter || residential || industrial || town;
           const kec = city_district || city;
           const kab = county;
           
-          if (ds) parts.push(`Desa ${ds}`);
+          if (ds) {
+            // Check if it already contains the word "Desa", "Kelurahan", etc. to avoid "Desa Desa X"
+            if (ds.toLowerCase().includes('desa') || ds.toLowerCase().includes('kelurahan')) {
+              parts.push(ds);
+            } else {
+              parts.push(`Desa/Kel. ${ds}`);
+            }
+          }
           if (kec) parts.push(`Kec. ${kec}`);
           if (kab) parts.push(`${kab}`);
           if (state) parts.push(`${state}`);
