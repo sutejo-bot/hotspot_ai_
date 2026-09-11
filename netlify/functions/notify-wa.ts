@@ -31,7 +31,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Missing body" }) };
     }
 
-    const { target, lat, lng, location, date, id } = JSON.parse(event.body);
+    const { target, lat, lng, location, date, id, source, confidence, zone } = JSON.parse(event.body);
     const token = process.env.FONNTE_TOKEN;
     
     if (!token) {
@@ -42,7 +42,28 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       };
     }
 
-    const pesan = `🚨 *DARURAT KARHUTLA!* 🚨\nTerdeteksi titik api baru!\n\n🔥 *ID*: ${id}\n📍 *Koordinat*: ${lat}, ${lng}\n🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n🕒 *Waktu*: ${date}\n\nSegera lakukan pengecekan ke lokasi!\n\n📍 *Buka Peta:*\nhttps://maps.google.com/?q=${lat},${lng}`;
+    const isAuto = source === 'auto';
+    const header = isAuto 
+      ? `🚨 *DARURAT KARHUTLA - DETEKSI OTOMATIS* 🚨` 
+      : `🚨 *DARURAT KARHUTLA - PENGIRIMAN MANUAL* 🚨`;
+
+    const statusText = isAuto
+      ? `🤖 *Status*: Notifikasi ini dikirim secara otomatis.`
+      : `👤 *Status*: Notifikasi ini dikirim secara manual oleh operator.`;
+
+    const zoneText = zone === 'iupk' 
+      ? 'IUPK PT Adaro Indonesia' 
+      : (zone === 'buffer' ? 'Buffer 1 KM' : 'Sekitar Wilayah Operasional');
+
+    const pesan = `${header}\n\n` +
+      `🔥 *ID*: ${id}\n` +
+      `📍 *Koordinat*: ${lat}, ${lng}\n` +
+      `🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n` +
+      `🕒 *Waktu*: ${date}\n` +
+      `🛡️ *Zona*: ${zoneText}\n\n` +
+      `${statusText}\n` +
+      `Segera lakukan pengecekan ke lokasi!\n\n` +
+      `📍 *Buka Peta:*\nhttps://maps.google.com/?q=${lat},${lng}`;
 
     const formData = new URLSearchParams();
     formData.append('target', target);

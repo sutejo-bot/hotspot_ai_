@@ -63,7 +63,10 @@ export default function Sidebar({
           lng: hotspot.location.lng,
           location: address,
           date: formatDateWITA(new Date(hotspot.detectedAt)) + ' ' + formatTimeWITA(new Date(hotspot.detectedAt)),
-          id: hotspot.id
+          id: hotspot.id,
+          source: 'manual',
+          confidence: hotspot.confidence,
+          zone: hotspot.zone
         })
       });
 
@@ -72,7 +75,7 @@ export default function Sidebar({
         throw new Error(data.error || "Gagal mengirim pesan Telegram");
       }
       
-      alert("Peringatan Telegram berhasil dikirim ke Chat ID terkonfigurasi!");
+      alert("Peringatan Telegram (Manual) berhasil dikirim ke Chat ID terkonfigurasi!");
     } catch (error: any) {
       alert(`Terjadi kesalahan: ${error.message}`);
     } finally {
@@ -97,7 +100,10 @@ export default function Sidebar({
           lng: hotspot.location.lng,
           location: address,
           date: formatDateWITA(new Date(hotspot.detectedAt)) + ' ' + formatTimeWITA(new Date(hotspot.detectedAt)),
-          id: hotspot.id
+          id: hotspot.id,
+          source: 'manual',
+          confidence: hotspot.confidence,
+          zone: hotspot.zone
         })
       });
 
@@ -106,7 +112,7 @@ export default function Sidebar({
         throw new Error(data.error || "Gagal mengirim pesan");
       }
       
-      alert("Peringatan WhatsApp berhasil dikirim!");
+      alert("Peringatan WhatsApp (Manual) berhasil dikirim!");
     } catch (error: any) {
       alert(`Terjadi kesalahan: ${error.message}`);
     } finally {
@@ -314,7 +320,7 @@ export default function Sidebar({
                       ) : (
                         <MessageCircle className="w-4 h-4 mr-2" />
                       )}
-                      Kirim Peringatan WA
+                      <span>Kirim Manual ke WA</span>
                     </button>
                     
                     <button
@@ -330,7 +336,7 @@ export default function Sidebar({
                       ) : (
                         <Send className="w-4 h-4 mr-2" />
                       )}
-                      Kirim ke Telegram
+                      <span>Kirim Manual ke Telegram</span>
                     </button>
 
                     {isNew && (

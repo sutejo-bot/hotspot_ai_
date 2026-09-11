@@ -37,6 +37,19 @@
   to = "/.netlify/functions/notify-telegram"
   status = 200
 
+[[redirects]]
+  from = "/api/auto-notify/status"
+  to = "/.netlify/functions/auto-notify-status"
+  status = 200
+
+[[redirects]]
+  from = "/api/auto-notify/run"
+  to = "/.netlify/functions/scheduled-check"
+  status = 200
+
+[functions."scheduled-check"]
+  schedule = "*/10 * * * *"
+
 # Single Page Application (SPA) redirect for client-side routing
 [[redirects]]
   from = "/*"

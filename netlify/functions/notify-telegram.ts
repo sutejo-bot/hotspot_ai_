@@ -31,7 +31,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Missing body" }) };
     }
 
-    const { lat, lng, location, date, id } = JSON.parse(event.body);
+    const { lat, lng, location, date, id, source, confidence, zone } = JSON.parse(event.body);
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
     
@@ -43,7 +43,30 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       };
     }
 
-    const pesan = `🚨 *DARURAT KARHUTLA!* 🚨\nTerdeteksi titik api baru!\n\n🔥 *ID*: ${id}\n📍 *Koordinat*: ${lat}, ${lng}\n🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n🕒 *Waktu*: ${date}\n\nSegera lakukan pengecekan ke lokasi!\n\n📍 *Buka Peta:*\nhttps://maps.google.com/?q=${lat},${lng}`;
+    const isAuto = source === 'auto';
+    const header = isAuto 
+      ? `🚨 *PERINGATAN DINI KARHUTLA - DETEKSI OTOMATIS* 🚨` 
+      : `🚨 *PERINGATAN DINI KARHUTLA - PENGIRIMAN MANUAL* 🚨`;
+
+    const statusText = isAuto
+      ? `🤖 *Status*: Notifikasi ini dikirim secara otomatis oleh server pemantau satelit 24/7.`
+      : `👤 *Status*: Notifikasi ini dikirim secara manual oleh operator melalui dashboard aplikasi.`;
+
+    const zoneText = zone === 'iupk' 
+      ? 'IUPK PT Adaro Indonesia (Inti Tambang / Kelanis)' 
+      : (zone === 'buffer' ? 'Buffer 1 KM (Konsesi / Hauling Road)' : 'Sekitar Wilayah Konsesi Adaro');
+
+    const confText = confidence ? `\n🎯 *Keyakinan*: ${confidence}%` : '';
+
+    const pesan = `${header}\n\n` +
+      `🔥 *ID Hotspot*: \`${id}\`\n` +
+      `📍 *Koordinat*: \`${lat}, ${lng}\`\n` +
+      `🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n` +
+      `🕒 *Waktu Satelit*: ${date}${confText}\n` +
+      `🛡️ *Kategori Wilayah*: ${zoneText}\n\n` +
+      `${statusText}\n` +
+      `⚠️ *Tindakan Petugas*: Segera koordinasikan dengan posko satgas terdekat untuk pengecekan lokasi!\n\n` +
+      `📍 *Buka Titik di Google Maps:*\nhttps://maps.google.com/?q=${lat},${lng}`;
 
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',

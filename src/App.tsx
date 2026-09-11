@@ -4,10 +4,11 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Key, Flame, Calendar, RefreshCw, Radio, Clock } from "lucide-react";
+import { AlertTriangle, Key, Flame, Calendar, RefreshCw, Radio, Clock, Bot } from "lucide-react";
 import MapComponent from "./components/MapComponent";
 import Sidebar from "./components/Sidebar";
 import PrintPreviewModal from "./components/PrintPreviewModal";
+import AutoNotifyModal from "./components/AutoNotifyModal";
 import { Hotspot, HotspotTimeRange } from "./types";
 import { fetchNasaHotspots, fetchDynamicIUPKBoundary } from "./data";
 import { cn, getTimeRangeLabel, getTimeRangeDescription, fetchAddressFromCoordinates, formatDateWITA, formatTimeWITA } from "./utils";
@@ -22,6 +23,26 @@ export default function App() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedHotspot, setSelectedHotspot] = useState<Hotspot | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showAutoNotifyModal, setShowAutoNotifyModal] = useState(false);
+  const [autoNotifyStatus, setAutoNotifyStatus] = useState<any>(null);
+
+  const fetchAutoNotifyStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auto-notify/status");
+      if (res.ok) {
+        const data = await res.json();
+        setAutoNotifyStatus(data);
+      }
+    } catch {
+      // ignore silent errors
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAutoNotifyStatus();
+    const timer = setInterval(fetchAutoNotifyStatus, 60 * 1000);
+    return () => clearInterval(timer);
+  }, [fetchAutoNotifyStatus]);
 
   const loadHotspots = useCallback(async (range: HotspotTimeRange = timeRange) => {
     setIsLoading(true);
@@ -91,68 +112,6 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [timeRange, loadHotspots]);
-
-  // Auto-send WhatsApp notification for new hotspots
-  useEffect(() => {
-    if (!boundaryLoaded || hotspots.length === 0) return;
-
-    const notifiedIdsStr = localStorage.getItem('auto_notified_hotspots') || '[]';
-    let notifiedIds: string[];
-    try {
-      notifiedIds = JSON.parse(notifiedIdsStr);
-    } catch {
-      notifiedIds = [];
-    }
-
-    const notifiedSet = new Set(notifiedIds);
-    const toNotify = hotspots.filter(h => h.status === 'new' && !notifiedSet.has(h.id));
-
-    if (toNotify.length > 0) {
-      toNotify.forEach(async (hotspot) => {
-        try {
-          const address = await fetchAddressFromCoordinates(hotspot.location.lat, hotspot.location.lng);
-          const formattedDate = formatDateWITA(new Date(hotspot.detectedAt)) + ' ' + formatTimeWITA(new Date(hotspot.detectedAt));
-          
-          // Send WA
-          fetch('/api/notify-wa', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              target: '085821237889',
-              lat: hotspot.location.lat,
-              lng: hotspot.location.lng,
-              location: address,
-              date: formattedDate,
-              id: hotspot.id
-            })
-          }).then(res => res.json()).then(data => console.log(`Auto WA for ${hotspot.id}:`, data)).catch(err => console.error("Auto WA failed", err));
-
-          // Send Telegram
-          fetch('/api/notify-telegram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              lat: hotspot.location.lat,
-              lng: hotspot.location.lng,
-              location: address,
-              date: formattedDate,
-              id: hotspot.id
-            })
-          }).then(res => res.json()).then(data => console.log(`Auto TG for ${hotspot.id}:`, data)).catch(err => console.error("Auto TG failed", err));
-
-        } catch (err) {
-          console.error("Failed to prepare auto notifications for", hotspot.id, err);
-        }
-      });
-
-      // Update localStorage immediately
-      toNotify.forEach(h => notifiedIds.push(h.id));
-      if (notifiedIds.length > 1000) {
-        notifiedIds = notifiedIds.slice(notifiedIds.length - 1000);
-      }
-      localStorage.setItem('auto_notified_hotspots', JSON.stringify(notifiedIds));
-    }
-  }, [hotspots, boundaryLoaded]);
 
   const acknowledgeHotspot = (id: string) => {
     setHotspots(prev => prev.map(h => 
@@ -285,6 +244,19 @@ export default function App() {
               Live Satelit
             </span>
           </div>
+
+          {/* 24/7 Telegram Automation Status Button */}
+          <button
+            onClick={() => setShowAutoNotifyModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 active:bg-blue-500/30 border border-blue-500/30 rounded-full transition-all text-blue-300 min-h-[30px]"
+            title="Status & Pengaturan Notifikasi Telegram Otomatis 24/7"
+          >
+            <Bot className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider hidden xs:inline">
+              Bot 24/7
+            </span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          </button>
 
           {/* Mobile Hotspot Drawer Button */}
           <button
@@ -420,6 +392,13 @@ export default function App() {
           onClose={() => setShowPrintPreview(false)}
         />
       )}
+
+      <AutoNotifyModal
+        isOpen={showAutoNotifyModal}
+        onClose={() => setShowAutoNotifyModal(false)}
+        status={autoNotifyStatus}
+        onRefreshStatus={fetchAutoNotifyStatus}
+      />
     </div>
   );
 }

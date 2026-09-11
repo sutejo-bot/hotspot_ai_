@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+import { startAutoNotifier, getAutoNotifierStatus, runHotspotCheckCycle } from "./src/server/autoNotifier";
 
 async function startServer() {
   const app = express();
@@ -32,14 +33,35 @@ async function startServer() {
   // API route for sending WhatsApp notifications via Fonnte
   app.post("/api/notify-wa", async (req, res) => {
     try {
-      const { target, lat, lng, location, date, id } = req.body;
+      const { target, lat, lng, location, date, id, source, confidence, zone } = req.body;
       const token = process.env.FONNTE_TOKEN;
       
       if (!token) {
         return res.status(500).json({ error: "Token Fonnte belum dikonfigurasi. Harap tambahkan 'FONNTE_TOKEN' pada menu Environment Variables di pengaturan Netlify Anda." });
       }
 
-      const pesan = `🚨 *DARURAT KARHUTLA!* 🚨\nTerdeteksi titik api baru!\n\n🔥 *ID*: ${id}\n📍 *Koordinat*: ${lat}, ${lng}\n🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n🕒 *Waktu*: ${date}\n\nSegera lakukan pengecekan ke lokasi!\n\n📍 *Buka Peta:*\nhttps://maps.google.com/?q=${lat},${lng}`;
+      const isAuto = source === 'auto';
+      const header = isAuto 
+        ? `🚨 *DARURAT KARHUTLA - DETEKSI OTOMATIS* 🚨` 
+        : `🚨 *DARURAT KARHUTLA - PENGIRIMAN MANUAL* 🚨`;
+
+      const statusText = isAuto
+        ? `🤖 *Status*: Notifikasi ini dikirim secara otomatis.`
+        : `👤 *Status*: Notifikasi ini dikirim secara manual oleh operator.`;
+
+      const zoneText = zone === 'iupk' 
+        ? 'IUPK PT Adaro Indonesia' 
+        : (zone === 'buffer' ? 'Buffer 1 KM' : 'Sekitar Wilayah Operasional');
+
+      const pesan = `${header}\n\n` +
+        `🔥 *ID*: ${id}\n` +
+        `📍 *Koordinat*: ${lat}, ${lng}\n` +
+        `🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n` +
+        `🕒 *Waktu*: ${date}\n` +
+        `🛡️ *Zona*: ${zoneText}\n\n` +
+        `${statusText}\n` +
+        `Segera lakukan pengecekan ke lokasi!\n\n` +
+        `📍 *Buka Peta:*\nhttps://maps.google.com/?q=${lat},${lng}`;
 
       const formData = new URLSearchParams();
       formData.append('target', target);
@@ -77,7 +99,7 @@ async function startServer() {
   // API route for sending Telegram notifications
   app.post("/api/notify-telegram", async (req, res) => {
     try {
-      const { lat, lng, location, date, id } = req.body;
+      const { lat, lng, location, date, id, source, confidence, zone } = req.body;
       const token = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID;
       
@@ -85,7 +107,30 @@ async function startServer() {
         return res.status(500).json({ error: "Token atau Chat ID Telegram belum dikonfigurasi. Harap tambahkan 'TELEGRAM_BOT_TOKEN' dan 'TELEGRAM_CHAT_ID' di menu Environment Variables." });
       }
 
-      const pesan = `🚨 *DARURAT KARHUTLA!* 🚨\nTerdeteksi titik api baru!\n\n🔥 *ID*: ${id}\n📍 *Koordinat*: ${lat}, ${lng}\n🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n🕒 *Waktu*: ${date}\n\nSegera lakukan pengecekan ke lokasi!\n\n📍 *Buka Peta:*\nhttps://maps.google.com/?q=${lat},${lng}`;
+      const isAuto = source === 'auto';
+      const header = isAuto 
+        ? `🚨 *PERINGATAN DINI KARHUTLA - DETEKSI OTOMATIS* 🚨` 
+        : `🚨 *PERINGATAN DINI KARHUTLA - PENGIRIMAN MANUAL* 🚨`;
+
+      const statusText = isAuto
+        ? `🤖 *Status*: Notifikasi ini dikirim secara otomatis oleh server pemantau satelit 24/7.`
+        : `👤 *Status*: Notifikasi ini dikirim secara manual oleh operator melalui dashboard aplikasi.`;
+
+      const zoneText = zone === 'iupk' 
+        ? 'IUPK PT Adaro Indonesia (Inti Tambang / Kelanis)' 
+        : (zone === 'buffer' ? 'Buffer 1 KM (Konsesi / Hauling Road)' : 'Sekitar Wilayah Konsesi Adaro');
+
+      const confText = confidence ? `\n🎯 *Keyakinan*: ${confidence}%` : '';
+
+      const pesan = `${header}\n\n` +
+        `🔥 *ID Hotspot*: \`${id}\`\n` +
+        `📍 *Koordinat*: \`${lat}, ${lng}\`\n` +
+        `🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n` +
+        `🕒 *Waktu Satelit*: ${date}${confText}\n` +
+        `🛡️ *Kategori Wilayah*: ${zoneText}\n\n` +
+        `${statusText}\n` +
+        `⚠️ *Tindakan Petugas*: Segera koordinasikan dengan posko satgas terdekat untuk pengecekan lokasi!\n\n` +
+        `📍 *Buka Titik di Google Maps:*\nhttps://maps.google.com/?q=${lat},${lng}`;
 
       const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
@@ -109,6 +154,25 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error sending Telegram:", error);
       res.status(500).json({ error: error.message || "Failed to send Telegram message" });
+    }
+  });
+
+  // API route to get auto-notifier status
+  app.get("/api/auto-notify/status", (req, res) => {
+    try {
+      res.json(getAutoNotifierStatus());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to get status" });
+    }
+  });
+
+  // API route to manually trigger background check
+  app.post("/api/auto-notify/run", async (req, res) => {
+    try {
+      const result = await runHotspotCheckCycle();
+      res.json({ success: true, result, status: getAutoNotifierStatus() });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to run check cycle" });
     }
   });
 
@@ -317,6 +381,8 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    // Start 24/7 background hotspot monitor
+    startAutoNotifier(5);
   });
 }
 
