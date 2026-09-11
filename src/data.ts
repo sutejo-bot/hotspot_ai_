@@ -17,16 +17,53 @@ export const ADARO_IUPK_COORDINATES: Coordinates[] = [
   { lat: -2.282, lng: 115.475 }, // Close the polygon
 ];
 
+// Dahai - Jalan Jenderal Achmad Yani Corridor & Facilities Buffer Extension
+// Mencakup koridor Jalan Jenderal Achmad Yani, Dahai Office Adaro, fasilitas operasional/workshop/camp,
+// serta area kolam dan penghubung antara blok IUPK Dahai dan Paringin
+export const DAHAI_CORRIDOR_BUFFER_COORDINATES: Coordinates[] = [
+  { lat: -2.2480, lng: 115.4570 },
+  { lat: -2.2510, lng: 115.4590 },
+  { lat: -2.2530, lng: 115.4610 },
+  { lat: -2.2560, lng: 115.4630 },
+  { lat: -2.2600, lng: 115.4650 },
+  { lat: -2.2640, lng: 115.4680 },
+  { lat: -2.2700, lng: 115.4710 },
+  { lat: -2.2760, lng: 115.4730 },
+  { lat: -2.2820, lng: 115.4740 },
+  { lat: -2.2860, lng: 115.4760 },
+  { lat: -2.2880, lng: 115.4800 },
+  { lat: -2.2880, lng: 115.4880 },
+  { lat: -2.2640, lng: 115.4880 },
+  { lat: -2.2640, lng: 115.4780 },
+  { lat: -2.2480, lng: 115.4750 },
+  { lat: -2.2480, lng: 115.4570 },
+];
+
+export const dahaiBufferPolygon = turf.polygon([[
+  ...DAHAI_CORRIDOR_BUFFER_COORDINATES.map(c => [c.lng, c.lat])
+]]);
+
+// Function to union base 1 km buffer with Dahai corridor extension
+export function createCombinedBuffer(poly: any): any {
+  const baseBuffer = turf.buffer(poly, 1.0, { units: 'kilometers' });
+  try {
+    const unioned = turf.union(turf.featureCollection([baseBuffer as any, dahaiBufferPolygon as any])) as any;
+    return unioned || baseBuffer;
+  } catch (e) {
+    return baseBuffer;
+  }
+}
+
 // Convert to Turf Polygon (lng, lat format)
 const iupkCoordsForTurf = ADARO_IUPK_COORDINATES.map(c => [c.lng, c.lat]);
 export let iupkPolygon = turf.polygon([[...iupkCoordsForTurf]]);
 
-// Calculate 1 km buffer
-export let iupkBuffer = turf.buffer(iupkPolygon, 1.0, { units: 'kilometers' });
+// Calculate 1 km buffer combined with Dahai corridor extension
+export let iupkBuffer = createCombinedBuffer(iupkPolygon);
 
 export function updateIupkBoundaries(geoJsonPolygon: any) {
   iupkPolygon = geoJsonPolygon;
-  iupkBuffer = turf.buffer(iupkPolygon, 1.0, { units: 'kilometers' });
+  iupkBuffer = createCombinedBuffer(iupkPolygon);
 }
 
 export async function fetchDynamicIUPKBoundary(): Promise<void> {
@@ -67,18 +104,21 @@ export function getIupkCoordinates(): Coordinates[][] {
   return [];
 }
 
-// Get buffer coordinates for Google Maps (deprecated/unused if we use GeoJSON directly, but kept for compat)
+// Get buffer coordinates for Leaflet Map
 export function getBufferCoordinates(): Coordinates[][] {
+  if (!iupkBuffer || !iupkBuffer.geometry) {
+    return [DAHAI_CORRIDOR_BUFFER_COORDINATES];
+  }
   if (iupkBuffer.geometry.type === "Polygon") {
     return [iupkBuffer.geometry.coordinates[0].map(
       (coord: any) => ({ lat: coord[1], lng: coord[0] })
     )];
   } else if (iupkBuffer.geometry.type === "MultiPolygon") {
-     return iupkBuffer.geometry.coordinates.map((poly: any) => 
+    return iupkBuffer.geometry.coordinates.map((poly: any) => 
       poly[0].map((coord: any) => ({ lat: coord[1], lng: coord[0] }))
     );
   }
-  return [];
+  return [DAHAI_CORRIDOR_BUFFER_COORDINATES];
 }
 
 export function getHaulRoadBufferCoordinates(): Coordinates[][] {
@@ -154,11 +194,15 @@ export function checkHotspotZone(lat: number, lng: number): "iupk" | "buffer" | 
   if (turf.booleanPointInPolygon(point, kelanisPortPolygon)) {
     return "iupk";
   }
-  // Check 1 km buffer of IUPK or Haul Road
+  // Check 1 km buffer of IUPK (which includes Dahai corridor buffer) or Haul Road
   if (turf.booleanPointInPolygon(point, iupkBuffer)) {
     return "buffer";
   }
   if (turf.booleanPointInPolygon(point, haulRoadBuffer)) {
+    return "buffer";
+  }
+  // Explicit safeguard for Dahai - Jalan Jenderal Achmad Yani corridor buffer
+  if (turf.booleanPointInPolygon(point, dahaiBufferPolygon)) {
     return "buffer";
   }
   return "outside";
