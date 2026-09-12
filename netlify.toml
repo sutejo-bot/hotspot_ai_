@@ -44,7 +44,7 @@
 
 [[redirects]]
   from = "/api/auto-notify/run"
-  to = "/.netlify/functions/scheduled-check"
+  to = "/.netlify/functions/auto-notify-run"
   status = 200
 
 [functions."scheduled-check"]

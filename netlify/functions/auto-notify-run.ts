@@ -1,10 +1,12 @@
-// Netlify Scheduled Function for background hotspot monitoring (cron: */10 * * * *)
+// Netlify Serverless Function for manual auto-notify execution
+// Replicates /api/auto-notify/run in serverless Netlify environment
 import fs from "fs";
 import { checkHotspotZone } from "../../src/data";
 import { findNearestLocalVillage } from "../../src/villageData";
 
 interface HandlerEvent {
-  httpMethod?: string;
+  httpMethod: string;
+  body: string | null;
 }
 
 interface HandlerResponse {
@@ -15,7 +17,13 @@ interface HandlerResponse {
 
 const STORAGE_FILE = "/tmp/notified_hotspots.json";
 
-function getStorage() {
+function getStorage(): {
+  createdAt: string;
+  updatedAt: string;
+  lastRunTime?: string | null;
+  lastCheckStatus?: string;
+  hotspots: Record<string, any>;
+} {
   try {
     if (fs.existsSync(STORAGE_FILE)) {
       return JSON.parse(fs.readFileSync(STORAGE_FILE, "utf-8"));
@@ -35,6 +43,34 @@ function saveStorage(data: any) {
     data.updatedAt = new Date().toISOString();
     fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2), "utf-8");
   } catch {}
+}
+
+// Reverse geocode with local village database fallback to ArcGIS
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  const local = findNearestLocalVillage(lat, lng);
+  if (local) return local;
+
+  try {
+    const url = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?location=${lng},${lat}&f=json`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "AdaroHotspotMonitor/1.0" },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (!res.ok) return "Wilayah Konsesi PT Adaro Indonesia";
+    const data = await res.json();
+    const addr = data.address || {};
+    const ds = addr.Neighborhood || addr.PlaceName || "";
+    const kec = addr.City || addr.District || "";
+    const kab = addr.Subregion || addr.MetroArea || "";
+
+    const parts: string[] = [];
+    if (ds) parts.push(ds.toLowerCase().includes("desa") ? ds : `Desa ${ds}`);
+    if (kec) parts.push(`Kec. ${kec}`);
+    if (kab) parts.push(`Kab. ${kab}`);
+    return parts.length > 0 ? parts.join(", ") : "Wilayah Konsesi PT Adaro Indonesia";
+  } catch {
+    return "Wilayah Konsesi PT Adaro Indonesia";
+  }
 }
 
 function formatWITA(dateObj: Date): string {
@@ -104,15 +140,24 @@ async function sendTelegramAlert(hotspot: {
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   const headers = {
     "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Content-Type": "application/json"
   };
+
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 204, headers, body: "" };
+  }
 
   const apiKey = process.env.NASA_API_KEY;
   if (!apiKey) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: "NASA_API_KEY is not configured" })
+      body: JSON.stringify({
+        success: false,
+        error: "NASA_API_KEY belum dikonfigurasi pada Environment Variables di Netlify."
+      })
     };
   }
 
@@ -133,13 +178,13 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       })
     );
 
-    const candidates: Array<{
+    const detectedCandidates: Array<{
       id: string;
       lat: number;
       lng: number;
-      zone: string;
       confidence: number;
       detectedAt: Date;
+      zone: string;
     }> = [];
 
     const seenIds = new Set<string>();
@@ -185,7 +230,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
 
         if (!seenIds.has(id)) {
           seenIds.add(id);
-          candidates.push({ id, lat, lng, zone, confidence, detectedAt });
+          detectedCandidates.push({ id, lat, lng, confidence, detectedAt, zone });
         }
       }
     }
@@ -194,7 +239,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
     const isFirstRun = Object.keys(storage.hotspots).length === 0;
 
     if (isFirstRun) {
-      for (const c of candidates) {
+      for (const c of detectedCandidates) {
         const loc = findNearestLocalVillage(c.lat, c.lng) || "Wilayah Operasional Adaro";
         storage.hotspots[c.id] = {
           id: c.id,
@@ -208,27 +253,38 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
         };
       }
       storage.lastRunTime = new Date().toISOString();
-      storage.lastCheckStatus = `Inisialisasi berhasil: ${candidates.length} hotspot tercatat sebagai baseline.`;
+      storage.lastCheckStatus = `Inisialisasi berhasil: ${detectedCandidates.length} hotspot tercatat sebagai baseline.`;
       saveStorage(storage);
+
+      const recent = Object.values(storage.hotspots).slice(0, 15);
 
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
-          status: "ok",
-          mode: "baseline_initialized",
-          checkedAt: storage.lastRunTime,
-          totalDetectedInZone: candidates.length
+          success: true,
+          result: { checked: detectedCandidates.length, newHotspots: 0, notified: [] },
+          status: {
+            enabled: true,
+            intervalMinutes: 10,
+            lastRunTime: storage.lastRunTime,
+            lastCheckStatus: storage.lastCheckStatus,
+            newHotspotsDetectedLastRun: 0,
+            totalTrackedHotspots: Object.keys(storage.hotspots).length,
+            telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+            whatsappConfigured: Boolean(process.env.FONNTE_TOKEN),
+            recentNotifications: recent
+          }
         })
       };
     }
 
-    const newHotspots = candidates.filter(c => !storage.hotspots[c.id]);
+    const newHotspots = detectedCandidates.filter(c => !storage.hotspots[c.id]);
     const notifiedIds: string[] = [];
 
     const alertsToSend = newHotspots.slice(0, 5);
     for (const h of alertsToSend) {
-      const locationName = findNearestLocalVillage(h.lat, h.lng) || "Wilayah Operasional Adaro";
+      const locationName = await reverseGeocode(h.lat, h.lng);
       const formattedDate = formatWITA(h.detectedAt);
       const tgSent = await sendTelegramAlert({
         id: h.id,
@@ -252,28 +308,60 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       if (tgSent) notifiedIds.push(h.id);
     }
 
+    for (let i = 5; i < newHotspots.length; i++) {
+      const h = newHotspots[i];
+      storage.hotspots[h.id] = {
+        id: h.id,
+        lat: h.lat,
+        lng: h.lng,
+        detectedAt: h.detectedAt.toISOString(),
+        notifiedAt: new Date().toISOString(),
+        location: "Wilayah Operasional Adaro",
+        zone: h.zone,
+        status: "notified"
+      };
+    }
+
     storage.lastRunTime = new Date().toISOString();
     storage.lastCheckStatus = newHotspots.length > 0
       ? `Sukses: ${newHotspots.length} hotspot baru terdeteksi dan notifikasi dikirim.`
-      : `Pemeriksaan selesai: Tidak ada titik api baru (${candidates.length} terpantau aman).`;
+      : `Pemeriksaan selesai: Tidak ada titik api baru (${detectedCandidates.length} terpantau aman).`;
     saveStorage(storage);
+
+    const allList = Object.values(storage.hotspots) as any[];
+    allList.sort((a, b) => new Date(b.notifiedAt).getTime() - new Date(a.notifiedAt).getTime());
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        status: "ok",
-        checkedAt: storage.lastRunTime,
-        totalDetectedInZone: candidates.length,
-        newHotspots: newHotspots.length,
-        notified: notifiedIds
+        success: true,
+        result: {
+          checked: detectedCandidates.length,
+          newHotspots: newHotspots.length,
+          notified: notifiedIds
+        },
+        status: {
+          enabled: true,
+          intervalMinutes: 10,
+          lastRunTime: storage.lastRunTime,
+          lastCheckStatus: storage.lastCheckStatus,
+          newHotspotsDetectedLastRun: newHotspots.length,
+          totalTrackedHotspots: allList.length,
+          telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+          whatsappConfigured: Boolean(process.env.FONNTE_TOKEN),
+          recentNotifications: allList.slice(0, 15)
+        }
       })
     };
   } catch (err: any) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: err.message || "Failed check" })
+      body: JSON.stringify({
+        success: false,
+        error: err?.message || "Gagal memproses pemeriksaan hotspot di Netlify"
+      })
     };
   }
 };
