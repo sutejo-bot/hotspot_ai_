@@ -2,7 +2,6 @@ import { useMemo, useEffect, useState, useRef, MutableRefObject } from "react";
 import { 
   MapContainer, 
   TileLayer,
-  WMSTileLayer,
   Polygon, 
   Polyline,
   Marker, 
@@ -208,16 +207,20 @@ const createMilestoneIcon = (km: number | string, isMajor: boolean, isCompact: b
   });
 };
 
-const PopupAddress = ({ lat, lng }: { lat: number, lng: number }) => {
-  const [address, setAddress] = useState<string>("Memuat lokasi...");
+const PopupAddress = ({ lat, lng, initialAddress }: { lat: number, lng: number, initialAddress?: string }) => {
+  const [address, setAddress] = useState<string>(() => initialAddress || "Memuat lokasi...");
   
   useEffect(() => {
+    if (initialAddress) {
+      setAddress(initialAddress);
+      return;
+    }
     let isMounted = true;
     fetchAddressFromCoordinates(lat, lng).then(res => {
       if (isMounted) setAddress(res);
     });
     return () => { isMounted = false; };
-  }, [lat, lng]);
+  }, [lat, lng, initialAddress]);
 
   return (
     <div className="text-[11px] mt-1.5 text-slate-700 leading-tight border-t border-slate-100 pt-1.5">
@@ -322,36 +325,13 @@ export default function MapComponent({
           </>
         )}
 
-        {/* WMS Layer for Official Administrative Boundaries (BIG) */}
-        {showAdmin && (
-          <>
-            {/* Base borders (Provinsi, Kabupaten, Kecamatan) - Faster to render */}
-            <WMSTileLayer
-              url="https://geoservices.big.go.id/r/batas_wilayah/wms"
-              layers="Batas_Provinsi,Batas_Kabupaten_Kota,Batas_Kecamatan"
-              format="image/png"
-              transparent={true}
-              opacity={0.8}
-              attribution="Badan Informasi Geospasial (BIG)"
-              // @ts-ignore - tiled is passed to Leaflet WMS params
-              tiled={true}
-              updateWhenIdle={true}
-              updateWhenZooming={false}
-            />
-            {/* Village borders (Desa) - Heavy to render, only load when zoomed in */}
-            <WMSTileLayer
-              url="https://geoservices.big.go.id/r/batas_wilayah/wms"
-              layers="Batas_Desa"
-              format="image/png"
-              transparent={true}
-              opacity={0.7}
-              // @ts-ignore
-              tiled={true}
-              updateWhenIdle={true}
-              updateWhenZooming={false}
-              minZoom={12}
-            />
-          </>
+        {/* Overlay Label & Batas Administrasi Wilayah (Desa, Kecamatan, Kabupaten) */}
+        {showAdmin && mapType !== "satellite" && (
+          <TileLayer
+            attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
+            url="https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+            opacity={0.9}
+          />
         )}
 
         {/* 1. Main IUPK Concession Boundary (ESDM GeoJSON) */}
@@ -520,7 +500,7 @@ export default function MapComponent({
                   Lat: {hotspot.location.lat.toFixed(5)}<br/>
                   Lng: {hotspot.location.lng.toFixed(5)}
                 </a>
-                <PopupAddress lat={hotspot.location.lat} lng={hotspot.location.lng} />
+                <PopupAddress lat={hotspot.location.lat} lng={hotspot.location.lng} initialAddress={hotspot.address} />
               </div>
             </Popup>
           </Marker>

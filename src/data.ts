@@ -1,5 +1,6 @@
 import * as turf from "@turf/turf";
 import { Coordinates } from "./types";
+import { findNearestLocalVillage } from "./villageData";
 
 // IUPK Coordinates from ESDM Minerba Geoportal (PT Adaro Indonesia - Tabalong/Balangan) fallback
 export const ADARO_IUPK_COORDINATES: Coordinates[] = [
@@ -18,39 +19,53 @@ export const ADARO_IUPK_COORDINATES: Coordinates[] = [
 ];
 
 // Dahai - Jalan Jenderal Achmad Yani Corridor & Facilities Buffer Extension
-// Mencakup koridor Jalan Jenderal Achmad Yani, Dahai Office Adaro, fasilitas operasional/workshop/camp,
-// serta area kolam dan penghubung antara blok IUPK Dahai dan Paringin
+// Batas barat dibuat garis lurus mengikuti sisi screenshot (lng: 115.4400) sehingga area buffer semakin luas
 export const DAHAI_CORRIDOR_BUFFER_COORDINATES: Coordinates[] = [
-  { lat: -2.2480, lng: 115.4570 },
-  { lat: -2.2510, lng: 115.4590 },
-  { lat: -2.2530, lng: 115.4610 },
-  { lat: -2.2560, lng: 115.4630 },
-  { lat: -2.2600, lng: 115.4650 },
-  { lat: -2.2640, lng: 115.4680 },
-  { lat: -2.2700, lng: 115.4710 },
-  { lat: -2.2760, lng: 115.4730 },
-  { lat: -2.2820, lng: 115.4740 },
-  { lat: -2.2860, lng: 115.4760 },
-  { lat: -2.2880, lng: 115.4800 },
-  { lat: -2.2880, lng: 115.4880 },
-  { lat: -2.2640, lng: 115.4880 },
+  { lat: -2.2350, lng: 115.4400 },
+  { lat: -2.2920, lng: 115.4400 }, // Garis lurus vertikal di batas barat (sisi screenshot)
+  { lat: -2.2920, lng: 115.4880 }, // Sisi selatan terhubung ke buffer IUPK Paringin
+  { lat: -2.2640, lng: 115.4880 }, // Sisi timur terhubung ke batas IUPK
   { lat: -2.2640, lng: 115.4780 },
-  { lat: -2.2480, lng: 115.4750 },
-  { lat: -2.2480, lng: 115.4570 },
+  { lat: -2.2350, lng: 115.4750 }, // Sisi utara terhubung ke buffer IUPK Dahai
+  { lat: -2.2350, lng: 115.4400 }, // Menutup poligon
 ];
 
 export const dahaiBufferPolygon = turf.polygon([[
   ...DAHAI_CORRIDOR_BUFFER_COORDINATES.map(c => [c.lng, c.lat])
 ]]);
 
-// Function to union base 1 km buffer with Dahai corridor extension
+// Batas Luar Kotak Konsesi Tambang Adaro Indonesia (ESDM WIUPK / PKP2B Blok Tambang Utama)
+// Garis horizontal selatan (lat: -2.32181) membentang dari barat (Balida/Murung Ilung) ke timur (Hukai/Tigarun)
+// Sesuai garis kotak hitam yang ditandai coretan merah
+export const ADARO_CONCESSION_BOX_COORDINATES: Coordinates[] = [
+  { lat: -2.12186, lng: 115.43306 }, // Batas Barat Laut (Utara Tabalong / Maburai)
+  { lat: -2.12186, lng: 115.60536 }, // Batas Timur Laut (Utara Wonorejo)
+  { lat: -2.32181, lng: 115.60536 }, // Batas Tenggara (Timur Galumbang / Panim / Tigarun)
+  { lat: -2.32181, lng: 115.43306 }, // Batas Barat Daya (Garis horizontal selatan di selatan Hukai, Marias, Murung Ilung)
+  { lat: -2.12186, lng: 115.43306 }, // Menutup poligon kotak
+];
+
+export const adaroConcessionBoxPolygon = turf.polygon([[
+  ...ADARO_CONCESSION_BOX_COORDINATES.map(c => [c.lng, c.lat])
+]]);
+
+// Function to union base 1 km buffer with Dahai corridor and full concession box extension
 export function createCombinedBuffer(poly: any): any {
   const baseBuffer = turf.buffer(poly, 1.0, { units: 'kilometers' });
   try {
-    const unioned = turf.union(turf.featureCollection([baseBuffer as any, dahaiBufferPolygon as any])) as any;
+    const unioned = turf.union(turf.featureCollection([
+      baseBuffer as any, 
+      dahaiBufferPolygon as any,
+      adaroConcessionBoxPolygon as any
+    ])) as any;
     return unioned || baseBuffer;
   } catch (e) {
-    return baseBuffer;
+    try {
+      const unionedFallback = turf.union(turf.featureCollection([baseBuffer as any, dahaiBufferPolygon as any])) as any;
+      return unionedFallback || baseBuffer;
+    } catch {
+      return baseBuffer;
+    }
   }
 }
 
@@ -201,6 +216,10 @@ export function checkHotspotZone(lat: number, lng: number): "iupk" | "buffer" | 
   if (turf.booleanPointInPolygon(point, haulRoadBuffer)) {
     return "buffer";
   }
+  // Explicit safeguard for Adaro concession bounding box area
+  if (turf.booleanPointInPolygon(point, adaroConcessionBoxPolygon)) {
+    return "buffer";
+  }
   // Explicit safeguard for Dahai - Jalan Jenderal Achmad Yani corridor buffer
   if (turf.booleanPointInPolygon(point, dahaiBufferPolygon)) {
     return "buffer";
@@ -312,6 +331,7 @@ export async function fetchNasaHotspots(range: HotspotTimeRange = 1): Promise<Ho
               zone,
               acqDate,
               daysAgo,
+              address: findNearestLocalVillage(lat, lng) || undefined,
             });
           });
           

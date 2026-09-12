@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { checkHotspotZone } from "../data";
+import { findNearestLocalVillage } from "../villageData";
 
 export interface AutoNotifierStatus {
   enabled: boolean;
@@ -90,8 +91,11 @@ function saveStorage(data: StorageData) {
   }
 }
 
-// Reverse geocode via ArcGIS (fast and accurate for Indonesian boundaries)
+// Reverse geocode via local database first, then ArcGIS
 async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  const local = findNearestLocalVillage(lat, lng);
+  if (local) return local;
+
   try {
     const url = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?location=${lng},${lat}&f=json`;
     const res = await fetch(url, {

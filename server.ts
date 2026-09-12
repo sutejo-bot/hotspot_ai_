@@ -280,30 +280,96 @@ async function startServer() {
     }
   });
 
-  // API route for OpenStreetMap Nominatim Geocoding Proxy
+  // In-memory cache for reverse geocoding results
+  const geocodeServerCache = new Map<string, any>();
+
+  // API route for ultra-fast Reverse Geocoding with In-Memory Cache and ArcGIS + OSM
   app.get("/api/geocode", async (req, res) => {
     try {
-      const { lat, lng } = req.query;
+      const latNum = parseFloat(req.query.lat as string);
+      const lngNum = parseFloat(req.query.lng as string);
       
-      if (!lat || !lng) {
-        return res.status(400).json({ error: "Missing lat or lng" });
+      if (isNaN(latNum) || isNaN(lngNum)) {
+        return res.status(400).json({ error: "Missing or invalid lat or lng" });
       }
 
-      // OpenStreetMap Nominatim is free and does not require an API key, 
-      // but requires a valid User-Agent to avoid being blocked.
-      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=id&email=namasayasutejo@gmail.com`;
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "AdaroHotspotMonitor/1.0 (namasayasutejo@gmail.com)"
-        }
-      });
-      
-      if (!response.ok) {
-        return res.status(response.status).json({ error: "Failed to fetch from OpenStreetMap Nominatim" });
+      // Cache key rounded to 4 decimals (~11 meter precision, perfect for hotspots)
+      const cacheKey = `${latNum.toFixed(4)},${lngNum.toFixed(4)}`;
+      if (geocodeServerCache.has(cacheKey)) {
+        return res.json(geocodeServerCache.get(cacheKey));
       }
-      
-      const data = await response.json();
-      res.json(data);
+
+      // 1. Primary engine: ArcGIS World Reverse Geocode (fast, no rate limits, accurate administrative fields)
+      try {
+        const arcgisUrl = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?location=${lngNum},${latNum}&f=json`;
+        const arcgisRes = await fetch(arcgisUrl, { signal: AbortSignal.timeout(3500) });
+        if (arcgisRes.ok) {
+          const arcgisData = await arcgisRes.json();
+          if (arcgisData && arcgisData.address) {
+            const addr = arcgisData.address;
+            const ds = addr.Neighborhood || addr.District || addr.PlaceName || addr.ShortLabel || "";
+            const kec = addr.City || "";
+            const kab = addr.Subregion || addr.MetroArea || "";
+            const prov = addr.Region || "";
+
+            const parts: string[] = [];
+            if (ds) {
+              if (ds.toLowerCase().includes("desa") || ds.toLowerCase().includes("kelurahan")) {
+                parts.push(ds);
+              } else {
+                parts.push(`Desa ${ds}`);
+              }
+            }
+            if (kec) parts.push(`Kec. ${kec}`);
+            if (kab) {
+              if (kab.toLowerCase().includes("kabupaten") || kab.toLowerCase().includes("kota")) {
+                parts.push(kab);
+              } else {
+                parts.push(`Kab. ${kab}`);
+              }
+            }
+            if (prov) parts.push(prov);
+
+            const displayName = parts.length > 0 ? parts.join(", ") : (addr.Match_addr || "Detail lokasi tidak tersedia");
+
+            const formatted = {
+              display_name: displayName,
+              address: {
+                village: ds,
+                city_district: kec,
+                county: kab,
+                state: prov,
+              }
+            };
+
+            geocodeServerCache.set(cacheKey, formatted);
+            return res.json(formatted);
+          }
+        }
+      } catch (arcgisErr) {
+        // Fallback to OSM
+      }
+
+      // 2. Fallback engine: OpenStreetMap Nominatim
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?lat=${latNum}&lon=${lngNum}&format=json&accept-language=id&email=namasayasutejo@gmail.com`;
+        const response = await fetch(url, {
+          headers: {
+            "User-Agent": "AdaroHotspotMonitor/1.0 (namasayasutejo@gmail.com)"
+          },
+          signal: AbortSignal.timeout(3500)
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          geocodeServerCache.set(cacheKey, data);
+          return res.json(data);
+        }
+      } catch (osmErr) {
+        // Continue to fallback response
+      }
+
+      res.status(404).json({ error: "Detail lokasi tidak tersedia" });
     } catch (error) {
       console.error("Error fetching geocoding:", error);
       res.status(500).json({ error: "Internal server error" });

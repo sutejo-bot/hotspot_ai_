@@ -11,7 +11,7 @@ import PrintPreviewModal from "./components/PrintPreviewModal";
 import AutoNotifyModal from "./components/AutoNotifyModal";
 import { Hotspot, HotspotTimeRange } from "./types";
 import { fetchNasaHotspots, fetchDynamicIUPKBoundary } from "./data";
-import { cn, getTimeRangeLabel, getTimeRangeDescription, fetchAddressFromCoordinates, formatDateWITA, formatTimeWITA } from "./utils";
+import { cn, getTimeRangeLabel, getTimeRangeDescription } from "./utils";
 
 export default function App() {
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);

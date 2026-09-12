@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { HotspotTimeRange } from "./types";
+import { findNearestLocalVillage } from "./villageData";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -77,99 +78,93 @@ export function formatHotspotRelativeTime(detectedAt: Date, daysAgo: number = 0)
 }
 
 const geocodeCache = new Map<string, string>();
-let geocodeQueue: (() => Promise<void>)[] = [];
-let isGeocoding = false;
+const inFlightRequests = new Map<string, Promise<string>>();
 
-async function processGeocodeQueue() {
-  if (isGeocoding || geocodeQueue.length === 0) return;
-  isGeocoding = true;
+export async function fetchAddressFromCoordinates(lat: number, lng: number): Promise<string> {
+  const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
   
-  while (geocodeQueue.length > 0) {
-    const task = geocodeQueue.shift();
-    if (task) {
-      await task();
-      // Wait 1.1 seconds between requests to respect Nominatim limits
-      await new Promise(resolve => setTimeout(resolve, 1100));
-    }
-  }
-  
-  isGeocoding = false;
-}
-
-export function fetchAddressFromCoordinates(lat: number, lng: number): Promise<string> {
-  const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
-  
-  // Return immediately if cached
+  // 1. Return immediately if cached
   if (geocodeCache.has(cacheKey)) {
-    return Promise.resolve(geocodeCache.get(cacheKey)!);
+    return geocodeCache.get(cacheKey)!;
   }
 
-  return new Promise((resolve) => {
-    geocodeQueue.push(async () => {
-      // Check cache again right before making the request
-      if (geocodeCache.has(cacheKey)) {
-        resolve(geocodeCache.get(cacheKey)!);
-        return;
+  // 2. High-speed Local Village matching (<0.01ms, 0 network latency)
+  const localMatch = findNearestLocalVillage(lat, lng);
+  if (localMatch) {
+    geocodeCache.set(cacheKey, localMatch);
+    return localMatch;
+  }
+
+  // 3. Deduplicate in-flight network requests for the exact same coordinate
+  if (inFlightRequests.has(cacheKey)) {
+    return inFlightRequests.get(cacheKey)!;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const url = `/api/geocode?lat=${lat}&lng=${lng}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        return "Detail lokasi tidak tersedia";
       }
       
-      try {
-        const url = `/api/geocode?lat=${lat}&lng=${lng}`;
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          resolve("Detail lokasi tidak tersedia");
-          return;
-        }
-        
-        const data = await response.json();
-        
-        if (data && data.address) {
-          const { village, hamlet, suburb, quarter, town, city_district, city, county, state } = data.address;
-          
-          const parts = [];
-          const ds = village || hamlet || suburb || quarter || town;
-          const kec = city_district || city;
-          const kab = county;
-          
-          if (ds) {
-            // Check if it already contains the word "Desa", "Kelurahan", etc. to avoid "Desa Desa X"
-            if (ds.toLowerCase().includes('desa') || ds.toLowerCase().includes('kelurahan')) {
-              parts.push(ds);
-            } else {
-              parts.push(`Desa/Kel. ${ds}`);
-            }
-          }
-          if (kec) parts.push(`Kec. ${kec}`);
-          if (kab) {
-            if (kab.toLowerCase().includes('kabupaten') || kab.toLowerCase().includes('kota')) {
-               parts.push(`${kab}`);
-            } else {
-               parts.push(`Kab. ${kab}`);
-            }
-          }
-          if (state) parts.push(`${state}`);
-          
-          if (parts.length > 0) {
-            const result = parts.join(", ");
-            geocodeCache.set(cacheKey, result);
-            resolve(result);
-            return;
-          }
-          
-          if (data.display_name) {
-            geocodeCache.set(cacheKey, data.display_name);
-            resolve(data.display_name);
-            return;
-          }
-        }
-        
-        resolve("Detail lokasi tidak tersedia");
-      } catch (error) {
-        console.error("Error fetching reverse geocoding:", error);
-        resolve("Detail lokasi tidak tersedia");
+      const data = await response.json();
+      
+      if (data && data.display_name && !data.address) {
+        geocodeCache.set(cacheKey, data.display_name);
+        return data.display_name;
       }
-    });
-    processGeocodeQueue();
-  });
+
+      if (data && data.address) {
+        const { village, hamlet, suburb, quarter, town, city_district, city, county, state } = data.address;
+        
+        const parts: string[] = [];
+        const ds = village || hamlet || suburb || quarter || town;
+        const kec = city_district || city;
+        const kab = county;
+        
+        if (ds) {
+          if (ds.toLowerCase().includes('desa') || ds.toLowerCase().includes('kelurahan')) {
+            parts.push(ds);
+          } else {
+            parts.push(`Desa/Kel. ${ds}`);
+          }
+        }
+        if (kec) parts.push(`Kec. ${kec}`);
+        if (kab) {
+          if (kab.toLowerCase().includes('kabupaten') || kab.toLowerCase().includes('kota')) {
+             parts.push(`${kab}`);
+          } else {
+             parts.push(`Kab. ${kab}`);
+          }
+        }
+        if (state) parts.push(`${state}`);
+        
+        if (parts.length > 0) {
+          const result = parts.join(", ");
+          geocodeCache.set(cacheKey, result);
+          return result;
+        }
+        
+        if (data.display_name) {
+          geocodeCache.set(cacheKey, data.display_name);
+          return data.display_name;
+        }
+      }
+      
+      return "Detail lokasi tidak tersedia";
+    } catch (error) {
+      console.error("Error fetching reverse geocoding:", error);
+      return "Detail lokasi tidak tersedia";
+    } finally {
+      inFlightRequests.delete(cacheKey);
+    }
+  })();
+
+  inFlightRequests.set(cacheKey, fetchPromise);
+  const result = await fetchPromise;
+  geocodeCache.set(cacheKey, result);
+  return result;
 }
 

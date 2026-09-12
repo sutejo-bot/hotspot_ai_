@@ -21,19 +21,23 @@ export default function PrintPreviewModal({ hotspots, timeRange, onClose }: Prin
     
     const enrichData = async () => {
       setIsEnriching(true);
-      const enriched = [...hotspots];
-      
-      for (let i = 0; i < enriched.length; i++) {
-        if (!enriched[i].address) {
-          const addr = await fetchAddressFromCoordinates(enriched[i].location.lat, enriched[i].location.lng);
-          if (isMounted) {
-            enriched[i] = { ...enriched[i], address: addr };
-            setEnrichedHotspots([...enriched]);
-          }
+      try {
+        const enriched = await Promise.all(
+          hotspots.map(async (h) => {
+            if (h.address) return h;
+            const addr = await fetchAddressFromCoordinates(h.location.lat, h.location.lng);
+            return { ...h, address: addr };
+          })
+        );
+        if (isMounted) {
+          setEnrichedHotspots(enriched);
         }
-      }
-      if (isMounted) {
-        setIsEnriching(false);
+      } catch (e) {
+        console.error("Error enriching hotspots:", e);
+      } finally {
+        if (isMounted) {
+          setIsEnriching(false);
+        }
       }
     };
     

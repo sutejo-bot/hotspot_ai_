@@ -17,16 +17,20 @@ interface SidebarProps {
   onOpenPrintPreview: () => void;
 }
 
-const SidebarAddress = ({ lat, lng }: { lat: number, lng: number }) => {
-  const [address, setAddress] = useState<string>("Memuat lokasi...");
+const SidebarAddress = ({ lat, lng, initialAddress }: { lat: number, lng: number, initialAddress?: string }) => {
+  const [address, setAddress] = useState<string>(() => initialAddress || "Memuat lokasi...");
   
   useEffect(() => {
+    if (initialAddress) {
+      setAddress(initialAddress);
+      return;
+    }
     let isMounted = true;
     fetchAddressFromCoordinates(lat, lng).then(res => {
       if (isMounted) setAddress(res);
     });
     return () => { isMounted = false; };
-  }, [lat, lng]);
+  }, [lat, lng, initialAddress]);
 
   return (
     <div className="text-[11px] text-slate-400 mt-2 p-2 bg-slate-800/50 rounded-lg border border-slate-700">
@@ -304,7 +308,7 @@ export default function Sidebar({
                     </span>
                   </div>
 
-                  <SidebarAddress lat={hotspot.location.lat} lng={hotspot.location.lng} />
+                  <SidebarAddress lat={hotspot.location.lat} lng={hotspot.location.lng} initialAddress={hotspot.address} />
 
                   <div className="mt-3 flex flex-col gap-2">
                     <button
