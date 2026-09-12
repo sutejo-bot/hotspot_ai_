@@ -614,7 +614,7 @@ export default function MapComponent({
 
             {/* Layers Checklist Matching PDF */}
             <div>
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Layer Operasional & Pengamanan</h4>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Layer Peta</h4>
               <div className="space-y-1">
                 <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
                   <input 
