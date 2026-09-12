@@ -55,7 +55,7 @@ export default function PrintPreviewModal({ hotspots, timeRange, onClose }: Prin
     // Header
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("Laporan Sebaran Hotspot Adaro Indonesia", pageWidth / 2, 20, { align: "center" });
+    doc.text("Laporan Sebaran Hotspot", pageWidth / 2, 20, { align: "center" });
     
     doc.setFontSize(11);
     doc.setFont("helvetica", "normal");
@@ -158,7 +158,7 @@ export default function PrintPreviewModal({ hotspots, timeRange, onClose }: Prin
           <div className="max-w-3xl mx-auto">
             {/* Header */}
             <div className="text-center mb-8 border-b pb-6 border-slate-200">
-              <h1 className="text-2xl font-bold text-slate-900 mb-2">Laporan Sebaran Hotspot Adaro Indonesia</h1>
+              <h1 className="text-2xl font-bold text-slate-900 mb-2">Laporan Sebaran Hotspot</h1>
               <p className="text-slate-600 font-medium mb-1">Periode: {getTimeRangeDescription(timeRange)}</p>
               <p className="text-sm text-slate-500">Dicetak pada: {dateGenerated} WITA</p>
             </div>

@@ -148,11 +148,11 @@ export default function App() {
       <header className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 bg-[#1e293b] border-b border-slate-700 shadow-md shrink-0 z-20 relative gap-2 print:hidden">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 bg-orange-600 rounded-xl flex items-center justify-center font-bold text-base sm:text-xl text-white shrink-0 shadow-sm">
-            AI
+            <Flame className="w-5 h-5 text-white" />
           </div>
           <div className="flex flex-col min-w-0">
             <h1 className="text-sm sm:text-base md:text-lg font-bold leading-tight tracking-tight uppercase truncate text-slate-100">
-              Peta Sebaran Hotspot di Area Adaro Indonesia
+              Peta Sebaran Hotspot
             </h1>
             <span className="text-[10px] sm:text-xs text-slate-400 font-mono truncate">
               IUPK PRODUKSI & WILAYAH PENUNJANG • TABALONG - BALANGAN - BARITO

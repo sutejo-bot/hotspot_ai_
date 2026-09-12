@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Hotspot, HotspotTimeRange } from "../types";
-import { Flame, CheckCircle, ShieldAlert, X, MapPin, Calendar, Clock, RefreshCw, Radio, MessageCircle, Loader2, Send } from "lucide-react";
+import { Flame, CheckCircle, ShieldAlert, X, MapPin, Calendar, Clock, RefreshCw, Radio, MessageCircle, Loader2, Send, Satellite, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn, getTimeRangeLabel, getTimeRangeDescription, formatHotspotRelativeTime, formatDateWITA, formatTimeWITA, fetchAddressFromCoordinates } from "../utils";
 import PrintPreviewModal from "./PrintPreviewModal";
@@ -69,6 +69,7 @@ export default function Sidebar({
           date: formatDateWITA(new Date(hotspot.detectedAt)) + ' ' + formatTimeWITA(new Date(hotspot.detectedAt)),
           id: hotspot.id,
           source: 'manual',
+          hotspotSource: hotspot.source || 'Multi-Satelit Terintegrasi',
           confidence: hotspot.confidence,
           zone: hotspot.zone
         })
@@ -106,6 +107,7 @@ export default function Sidebar({
           date: formatDateWITA(new Date(hotspot.detectedAt)) + ' ' + formatTimeWITA(new Date(hotspot.detectedAt)),
           id: hotspot.id,
           source: 'manual',
+          hotspotSource: hotspot.source || 'Multi-Satelit Terintegrasi',
           confidence: hotspot.confidence,
           zone: hotspot.zone
         })
@@ -141,7 +143,33 @@ export default function Sidebar({
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-500 mt-0.5">Satelit VIIRS / MODIS NASA</p>
+            <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5 mb-1">
+                <Satellite className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span>Sumber Data Satelit Terintegrasi:</span>
+              </span>
+              <span className="flex flex-wrap gap-1 text-[10px]">
+                <span className="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800/60 font-medium" title="Satelit Geostasioner Jepang Himawari-8 & 9 (JMA / JAXA)">
+                  Jepang (Himawari-9)
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-medium" title="Sistem Pemantauan Karhutla Nasional - Kementerian Lingkungan Hidup dan Kehutanan">
+                  SiPongi+ (KLHK)
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 font-medium" title="Pusat Riset Geoinformatika BRIN - INDOFIRMS">
+                  BRIN
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 font-medium" title="Badan Meteorologi, Klimatologi, dan Geofisika">
+                  BMKG
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/60 font-medium" title="NASA Earthdata FIRMS & NOAA (VIIRS, MODIS, Landsat)">
+                  NASA / NOAA
+                </span>
+              </span>
+              <span className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>Anti-Tumpang Tindih Aktif: Klaster 1.5 km / 24 Jam</span>
+              </span>
+            </p>
           </div>
 
           {/* Mobile Close Button */}
@@ -289,6 +317,15 @@ export default function Sidebar({
                   <div className="text-sm font-semibold mb-1 flex items-center gap-1.5 text-slate-100">
                     <Flame className={cn("w-4 h-4 shrink-0", isToday ? "text-red-500" : "text-orange-500")} />
                     <span>ID: {hotspot.id.toUpperCase()}</span>
+                  </div>
+
+                  {/* Satellite Source Indicator */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-300 mb-2 bg-slate-900/90 border border-slate-800/90 px-2 py-1.5 rounded-lg">
+                    <Satellite className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span className="text-slate-400 font-semibold shrink-0">Sumber:</span>
+                    <span className="text-slate-200 font-medium truncate" title={hotspot.source || "Multi-Satelit Terpadu"}>
+                      {hotspot.source || "Multi-Satelit (Jepang / SiPongi / BRIN / BMKG)"}
+                    </span>
                   </div>
                   <div className="text-[11px] font-mono mt-2 flex items-center justify-between">
                     <a 

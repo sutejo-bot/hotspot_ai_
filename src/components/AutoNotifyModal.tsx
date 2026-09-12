@@ -168,11 +168,12 @@ export default function AutoNotifyModal({
           <div className="p-3.5 rounded-xl bg-blue-950/40 border border-blue-800/50 text-slate-300 space-y-1.5">
             <div className="font-semibold text-blue-300 flex items-center gap-1.5 text-xs">
               <ShieldCheck className="w-4 h-4 text-blue-400" />
-              Bagaimana Otomatisasi Bekerja Sekarang?
+              Sistem Otomatisasi & Anti-Duplikasi Hotspot
             </div>
             <p className="text-[11px] leading-relaxed text-slate-300">
-              Sebelumnya, pengiriman pesan hanya terpicu saat aplikasi dibuka di peramban. Sekarang, <strong>server backend menjalankan daemon pemantau otomatis setiap {status?.intervalMinutes || 5} menit</strong>. 
-              Begitu satelit NASA mendeteksi anomali termal baru di area IUPK, buffer 1 km, atau koridor hauling road Adaro, bot akan <strong>langsung mengirimkan peringatan darurat ke Telegram Anda seketika</strong>, meskipun ponsel atau komputer Anda sedang dalam kondisi mati/tertutup.
+              • <strong>Mandiri 24/7 di Server</strong>: Pengecekan satelit berjalan otomatis setiap {status?.intervalMinutes || 10} menit di latar belakang server tanpa perlu membuka web.<br />
+              • <strong>Anti-Spam & Anti-Duplikasi</strong>: Menggunakan klaster spasial 1.2 KM & jendela waktu 24 jam. Titik api yang sama tidak akan dikirim berulang kali.<br />
+              • <strong>Aman Saat Web Dibuka</strong>: Membuka atau mengakses aplikasi tidak akan memicu pengiriman notifikasi otomatis ulang.
             </p>
           </div>
 
@@ -242,6 +243,21 @@ export default function AutoNotifyModal({
                         )}>
                           {n.zone === "iupk" ? "IUPK" : "Buffer 1KM"}
                         </span>
+                        {n.status === "notified" && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            Terkirim
+                          </span>
+                        )}
+                        {n.status === "cluster_duplicate" && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-slate-700/60 text-slate-400 border border-slate-600/40">
+                            Klaster Aman
+                          </span>
+                        )}
+                        {n.status === "initial_baseline" && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                            Baseline
+                          </span>
+                        )}
                       </div>
                       <div className="text-slate-400 text-[11px] truncate mt-0.5 flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-slate-500 shrink-0" />

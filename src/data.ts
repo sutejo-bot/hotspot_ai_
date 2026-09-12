@@ -249,6 +249,109 @@ export function generateRandomHotspot() {
 import Papa from "papaparse";
 import { Hotspot, HotspotTimeRange } from "./types";
 
+export function identifyHotspotSource(rowOrSat: any, instrumentArg?: string): {
+  source: string;
+  satellite: string;
+  agency: string;
+} {
+  let sat = "";
+  let inst = "";
+
+  if (typeof rowOrSat === "string") {
+    sat = rowOrSat.trim();
+    inst = String(instrumentArg || "").trim();
+  } else if (rowOrSat && typeof rowOrSat === "object") {
+    sat = String(rowOrSat.satellite || "").trim();
+    inst = String(rowOrSat.instrument || instrumentArg || "").trim();
+  }
+
+  // Himawari-8 / Himawari-9 (JMA / JAXA Jepang & BMKG)
+  if (sat.toLowerCase().includes("himawari") || sat === "H08" || sat === "H09" || inst.toLowerCase().includes("ahi")) {
+    return {
+      source: "Satelit Jepang: Himawari-9 (JMA & BMKG)",
+      satellite: "Himawari-9 (Jepang)",
+      agency: "JMA / BMKG",
+    };
+  }
+
+  // Suomi-NPP (VIIRS) - digunakan SiPongi+ KLHK & NASA
+  if (sat === "N" || sat.toLowerCase().includes("snpp") || sat.toLowerCase().includes("suomi")) {
+    return {
+      source: "SiPongi+ KLHK & NASA: Suomi-NPP (VIIRS)",
+      satellite: "Suomi-NPP",
+      agency: "SiPongi+ (KLHK) / NASA",
+    };
+  }
+
+  // NOAA-20 / JPSS-1 (VIIRS) - digunakan BRIN INDOFIRMS & BMKG
+  if (sat === "N20" || sat.toLowerCase().includes("noaa-20") || sat.toLowerCase().includes("j01")) {
+    return {
+      source: "BRIN INDOFIRMS & BMKG: NOAA-20 (VIIRS)",
+      satellite: "NOAA-20",
+      agency: "BRIN / BMKG",
+    };
+  }
+
+  // NOAA-21 / JPSS-2 (VIIRS) - digunakan SiPongi+ KLHK & BRIN
+  if (sat === "N21" || sat.toLowerCase().includes("noaa-21") || sat.toLowerCase().includes("j02")) {
+    return {
+      source: "SiPongi+ KLHK & BRIN: NOAA-21 (VIIRS)",
+      satellite: "NOAA-21",
+      agency: "SiPongi+ / BRIN",
+    };
+  }
+
+  // MODIS Aqua (NASA & BMKG)
+  if (sat.toLowerCase().includes("aqua") || (inst === "MODIS" && sat.toLowerCase().includes("a"))) {
+    return {
+      source: "BMKG & NASA: Aqua (MODIS)",
+      satellite: "Aqua",
+      agency: "BMKG / NASA",
+    };
+  }
+
+  // MODIS Terra (SiPongi+ KLHK & NASA)
+  if (sat.toLowerCase().includes("terra") || (inst === "MODIS" && sat.toLowerCase().includes("t"))) {
+    return {
+      source: "SiPongi+ KLHK & NASA: Terra (MODIS)",
+      satellite: "Terra",
+      agency: "SiPongi+ / NASA",
+    };
+  }
+
+  // Landsat-8 / Landsat-9 (BRIN & USGS)
+  if (sat.toLowerCase().includes("landsat") || sat === "L8" || sat === "L9" || inst.toLowerCase().includes("oli") || inst.toLowerCase().includes("tirs")) {
+    return {
+      source: "BRIN & USGS: Landsat-8/9 (TIRS)",
+      satellite: "Landsat-8/9",
+      agency: "BRIN / USGS",
+    };
+  }
+
+  // Generic fallback if column format differs
+  if (inst === "VIIRS") {
+    return {
+      source: "SiPongi+ KLHK / BRIN: VIIRS",
+      satellite: "VIIRS",
+      agency: "SiPongi+ / BRIN",
+    };
+  }
+
+  if (inst === "MODIS") {
+    return {
+      source: "BMKG & NASA: MODIS",
+      satellite: "MODIS",
+      agency: "BMKG / NASA",
+    };
+  }
+
+  return {
+    source: "Multi-Satelit Terpadu (Jepang / BRIN / SiPongi / BMKG)",
+    satellite: "Multi-Satelit",
+    agency: "Terintegrasi",
+  };
+}
+
 export async function fetchNasaHotspots(range: HotspotTimeRange = 1): Promise<Hotspot[]> {
   try {
     const apiParam = range === "now" || range === "12h" || range === 1 ? 2 : range;
@@ -308,6 +411,9 @@ export async function fetchNasaHotspots(range: HotspotTimeRange = 1): Promise<Ho
               }
             }
 
+            // Identify satellite & agency source info
+            const sourceInfo = identifyHotspotSource(row);
+
             // Deterministic unique ID based on high-precision coordinates and timestamp
             const latStr = Math.abs(lat).toFixed(4).replace(".", "");
             const lngStr = Math.abs(lng).toFixed(4).replace(".", "");
@@ -332,6 +438,9 @@ export async function fetchNasaHotspots(range: HotspotTimeRange = 1): Promise<Ho
               acqDate,
               daysAgo,
               address: findNearestLocalVillage(lat, lng) || undefined,
+              source: sourceInfo.source,
+              satellite: sourceInfo.satellite,
+              agency: sourceInfo.agency,
             });
           });
           

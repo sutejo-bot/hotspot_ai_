@@ -15,6 +15,9 @@ export interface Hotspot {
   acqDate?: string; // YYYY-MM-DD
   daysAgo?: number; // 0 = today, 1 = yesterday, etc.
   address?: string; // e.g. Desa, Kecamatan, Kabupaten, Provinsi
+  source?: string; // e.g. "Himawari-9 (Jepang / JMA)", "VIIRS (SiPongi KLHK / NASA)", "NOAA-20 (BRIN / BMKG)"
+  satellite?: string;
+  agency?: string;
 }
 
 export interface GeoJsonPolygon {

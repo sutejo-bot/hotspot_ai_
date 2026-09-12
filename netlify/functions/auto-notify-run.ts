@@ -1,7 +1,7 @@
 // Netlify Serverless Function for manual auto-notify execution
 // Replicates /api/auto-notify/run in serverless Netlify environment
 import fs from "fs";
-import { checkHotspotZone } from "../../src/data";
+import { checkHotspotZone, identifyHotspotSource } from "../../src/data";
 import { findNearestLocalVillage } from "../../src/villageData";
 
 interface HandlerEvent {
@@ -16,6 +16,37 @@ interface HandlerResponse {
 }
 
 const STORAGE_FILE = "/tmp/notified_hotspots.json";
+
+function calculateDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const dLat = (lat1 - lat2) * 111.0;
+  const dLng = (lng1 - lng2) * 110.9;
+  return Math.sqrt(dLat * dLat + dLng * dLng);
+}
+
+function findExistingRecentCluster(
+  lat: number,
+  lng: number,
+  detectedAt: Date,
+  storage: { hotspots: Record<string, any> },
+  radiusKm = 1.5,
+  windowHours = 24
+): any | null {
+  const candidateTime = detectedAt.getTime();
+
+  for (const item of Object.values(storage.hotspots)) {
+    const itemTime = new Date(item.detectedAt || item.notifiedAt).getTime();
+    const diffHours = Math.abs(candidateTime - itemTime) / (1000 * 60 * 60);
+
+    if (diffHours <= windowHours) {
+      const dist = calculateDistanceKm(lat, lng, item.lat, item.lng);
+      if (dist <= radiusKm) {
+        return item;
+      }
+    }
+  }
+
+  return null;
+}
 
 function getStorage(): {
   createdAt: string;
@@ -98,24 +129,30 @@ async function sendTelegramAlert(hotspot: {
   date: string;
   zone: string;
   confidence: number;
+  source?: string;
 }): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) return false;
 
-  const zoneLabel = hotspot.zone === "iupk"
-    ? "IUPK PT Adaro Indonesia (Area Inti Tambang / Pelabuhan Kelanis)"
-    : "Buffer 1 KM (Konsesi / Koridor Hauling Road)";
+  const zoneLabel =
+    hotspot.zone === "iupk"
+      ? "IUPK PT Adaro Indonesia (Area Inti Tambang / Pelabuhan Kelanis)"
+      : "Buffer 1 KM (Konsesi / Koridor Hauling Road)";
 
-  const pesan = `🚨 *PERINGATAN DINI KARHUTLA - DETEKSI OTOMATIS* 🚨\n\n` +
+  const sourceName = hotspot.source || "Multi-Satelit Terintegrasi (Jepang / BRIN / SiPongi / BMKG)";
+
+  const pesan =
+    `🚨 *PERINGATAN DINI KARHUTLA - DETEKSI OTOMATIS* 🚨\n\n` +
     `Sistem mendeteksi adanya anomali termal / titik api baru di area operasional Adaro Indonesia:\n\n` +
     `🔥 *ID Hotspot*: \`${hotspot.id}\`\n` +
+    `🛰️ *Sumber Satelit*: ${sourceName}\n` +
     `📍 *Koordinat*: \`${hotspot.lat}, ${hotspot.lng}\`\n` +
     `🗺️ *Lokasi*: ${hotspot.location}\n` +
     `🕒 *Waktu Satelit*: ${hotspot.date}\n` +
-    `🎯 *Keyakinan*: ${hotspot.confidence}%\n` +
+    `🎯 *Tingkat Keyakinan*: ${hotspot.confidence}%\n` +
     `🛡️ *Kategori Wilayah*: ${zoneLabel}\n\n` +
-    `🤖 *Status*: Notifikasi ini dikirim secara otomatis oleh server pemantau satelit 24/7.\n` +
+    `🤖 *Status Sistem*: Pengecekan otomatis 24/7 (Anti-Tumpang Tindih 1.5 km / 24 Jam Aktif).\n` +
     `⚠️ *Perhatian Petugas*: Segera hubungi posko satgas terdekat untuk pengecekan darat!\n\n` +
     `📍 *Buka Titik di Google Maps:*\n` +
     `https://maps.google.com/?q=${hotspot.lat},${hotspot.lng}`;
@@ -141,12 +178,12 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Content-Type": "application/json"
   };
 
   if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers, body: "" };
+    return { statusCode: 200, headers, body: "" };
   }
 
   const apiKey = process.env.NASA_API_KEY;
@@ -154,16 +191,13 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({
-        success: false,
-        error: "NASA_API_KEY belum dikonfigurasi pada Environment Variables di Netlify."
-      })
+      body: JSON.stringify({ success: false, error: "NASA_API_KEY belum dikonfigurasi di Netlify." })
     };
   }
 
   try {
     const bbox = "114.85,-2.35,115.65,-2.05";
-    const sources = ["VIIRS_SNPP_NRT", "MODIS_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"];
+    const sources = ["VIIRS_SNPP_NRT", "MODIS_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT", "LANDSAT_NRT"];
 
     const csvResults = await Promise.all(
       sources.map(async (src) => {
@@ -185,6 +219,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       confidence: number;
       detectedAt: Date;
       zone: string;
+      source: string;
     }> = [];
 
     const seenIds = new Set<string>();
@@ -223,14 +258,25 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
           detectedAt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], parseInt(hours, 10), parseInt(mins, 10)));
         }
 
-        const latStr = Math.abs(lat).toFixed(4).replace(".", "");
-        const lngStr = Math.abs(lng).toFixed(4).replace(".", "");
-        const timePart = `${acqDate.replace(/-/g, "").slice(4)}${acqTime || ""}`;
-        const id = `HS-${latStr}-${lngStr}-${timePart}`;
+        const latKey = Math.abs(lat).toFixed(3).replace(".", "");
+        const lngKey = Math.abs(lng).toFixed(3).replace(".", "");
+        const paddedTime = (acqTime || "0000").padStart(4, "0");
+        const dateKey = acqDate.replace(/-/g, "");
+        const id = `HS-${latKey}-${lngKey}-${dateKey}-${paddedTime}`;
+
+        const satInfo = identifyHotspotSource(cols[7] || "", cols[8] || "");
 
         if (!seenIds.has(id)) {
           seenIds.add(id);
-          detectedCandidates.push({ id, lat, lng, confidence, detectedAt, zone });
+          detectedCandidates.push({
+            id,
+            lat,
+            lng,
+            confidence,
+            detectedAt,
+            zone,
+            source: satInfo.source
+          });
         }
       }
     }
@@ -249,11 +295,12 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
           notifiedAt: new Date().toISOString(),
           location: loc,
           zone: c.zone,
+          source: c.source,
           status: "initial_baseline"
         };
       }
       storage.lastRunTime = new Date().toISOString();
-      storage.lastCheckStatus = `Inisialisasi berhasil: ${detectedCandidates.length} hotspot tercatat sebagai baseline.`;
+      storage.lastCheckStatus = `Inisialisasi baseline berhasil: ${detectedCandidates.length} hotspot tercatat aman tanpa kirim notifikasi.`;
       saveStorage(storage);
 
       const recent = Object.values(storage.hotspots).slice(0, 15);
@@ -279,10 +326,43 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       };
     }
 
-    const newHotspots = detectedCandidates.filter(c => !storage.hotspots[c.id]);
-    const notifiedIds: string[] = [];
+    // SPATIAL-TEMPORAL DEDUPLICATION (1.5 KM & 24 Jam):
+    const genuineNewHotspots: typeof detectedCandidates = [];
 
-    const alertsToSend = newHotspots.slice(0, 5);
+    for (const candidate of detectedCandidates) {
+      if (storage.hotspots[candidate.id]) continue;
+
+      const existingCluster = findExistingRecentCluster(
+        candidate.lat,
+        candidate.lng,
+        candidate.detectedAt,
+        storage,
+        1.5,
+        24
+      );
+
+      if (existingCluster) {
+        storage.hotspots[candidate.id] = {
+          id: candidate.id,
+          lat: candidate.lat,
+          lng: candidate.lng,
+          detectedAt: candidate.detectedAt.toISOString(),
+          notifiedAt: new Date().toISOString(),
+          location: existingCluster.location || "Wilayah Operasional Adaro",
+          zone: candidate.zone,
+          source: candidate.source,
+          clusterWith: existingCluster.id,
+          status: "cluster_duplicate"
+        };
+        continue;
+      }
+
+      genuineNewHotspots.push(candidate);
+    }
+
+    const notifiedIds: string[] = [];
+    const alertsToSend = genuineNewHotspots.slice(0, 5);
+
     for (const h of alertsToSend) {
       const locationName = await reverseGeocode(h.lat, h.lng);
       const formattedDate = formatWITA(h.detectedAt);
@@ -293,7 +373,8 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
         location: locationName,
         date: formattedDate,
         zone: h.zone,
-        confidence: h.confidence
+        confidence: h.confidence,
+        source: h.source
       });
       storage.hotspots[h.id] = {
         id: h.id,
@@ -303,13 +384,14 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
         notifiedAt: new Date().toISOString(),
         location: locationName,
         zone: h.zone,
+        source: h.source,
         status: "notified"
       };
       if (tgSent) notifiedIds.push(h.id);
     }
 
-    for (let i = 5; i < newHotspots.length; i++) {
-      const h = newHotspots[i];
+    for (let i = 5; i < genuineNewHotspots.length; i++) {
+      const h = genuineNewHotspots[i];
       storage.hotspots[h.id] = {
         id: h.id,
         lat: h.lat,
@@ -318,14 +400,16 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
         notifiedAt: new Date().toISOString(),
         location: "Wilayah Operasional Adaro",
         zone: h.zone,
+        source: h.source,
         status: "notified"
       };
     }
 
     storage.lastRunTime = new Date().toISOString();
-    storage.lastCheckStatus = newHotspots.length > 0
-      ? `Sukses: ${newHotspots.length} hotspot baru terdeteksi dan notifikasi dikirim.`
-      : `Pemeriksaan selesai: Tidak ada titik api baru (${detectedCandidates.length} terpantau aman).`;
+    storage.lastCheckStatus =
+      genuineNewHotspots.length > 0
+        ? `Sukses: ${genuineNewHotspots.length} hotspot baru terdeteksi dan notifikasi dikirim.`
+        : `Pemeriksaan selesai: Tidak ada titik api baru di area konsesi (${detectedCandidates.length} terpantau aman).`;
     saveStorage(storage);
 
     const allList = Object.values(storage.hotspots) as any[];
@@ -338,7 +422,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
         success: true,
         result: {
           checked: detectedCandidates.length,
-          newHotspots: newHotspots.length,
+          newHotspots: genuineNewHotspots.length,
           notified: notifiedIds
         },
         status: {
@@ -346,7 +430,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
           intervalMinutes: 10,
           lastRunTime: storage.lastRunTime,
           lastCheckStatus: storage.lastCheckStatus,
-          newHotspotsDetectedLastRun: newHotspots.length,
+          newHotspotsDetectedLastRun: genuineNewHotspots.length,
           totalTrackedHotspots: allList.length,
           telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
           whatsappConfigured: Boolean(process.env.FONNTE_TOKEN),

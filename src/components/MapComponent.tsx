@@ -490,6 +490,11 @@ export default function MapComponent({
                 <div className="text-xs text-slate-600 mb-1">
                   Tingkat Keyakinan: <span className={hotspot.confidence > 80 ? 'text-red-600 font-bold' : 'text-orange-600 font-bold'}>{hotspot.confidence}%</span>
                 </div>
+                {hotspot.source && (
+                  <div className="text-xs text-slate-600 mb-1">
+                    Sumber / Satelit: <span className="font-semibold text-blue-700">{hotspot.source}</span>
+                  </div>
+                )}
                 <a 
                   href={`https://www.google.com/maps/search/?api=1&query=${hotspot.location.lat},${hotspot.location.lng}`} 
                   target="_blank" 

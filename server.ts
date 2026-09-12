@@ -33,7 +33,7 @@ async function startServer() {
   // API route for sending WhatsApp notifications via Fonnte
   app.post("/api/notify-wa", async (req, res) => {
     try {
-      const { target, lat, lng, location, date, id, source, confidence, zone } = req.body;
+      const { target, lat, lng, location, date, id, source, hotspotSource, confidence, zone } = req.body;
       const token = process.env.FONNTE_TOKEN;
       
       if (!token) {
@@ -46,15 +46,18 @@ async function startServer() {
         : `🚨 *DARURAT KARHUTLA - PENGIRIMAN MANUAL* 🚨`;
 
       const statusText = isAuto
-        ? `🤖 *Status*: Notifikasi ini dikirim secara otomatis.`
+        ? `🤖 *Status*: Notifikasi ini dikirim secara otomatis oleh sistem 24/7.`
         : `👤 *Status*: Notifikasi ini dikirim secara manual oleh operator.`;
 
       const zoneText = zone === 'iupk' 
         ? 'IUPK PT Adaro Indonesia' 
         : (zone === 'buffer' ? 'Buffer 1 KM' : 'Sekitar Wilayah Operasional');
 
+      const sourceText = hotspotSource || 'Multi-Satelit Terintegrasi (Jepang / BRIN / SiPongi / BMKG)';
+
       const pesan = `${header}\n\n` +
         `🔥 *ID*: ${id}\n` +
+        `🛰️ *Sumber Satelit*: ${sourceText}\n` +
         `📍 *Koordinat*: ${lat}, ${lng}\n` +
         `🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n` +
         `🕒 *Waktu*: ${date}\n` +
@@ -99,7 +102,7 @@ async function startServer() {
   // API route for sending Telegram notifications
   app.post("/api/notify-telegram", async (req, res) => {
     try {
-      const { lat, lng, location, date, id, source, confidence, zone } = req.body;
+      const { lat, lng, location, date, id, source, hotspotSource, confidence, zone } = req.body;
       const token = process.env.TELEGRAM_BOT_TOKEN;
       const chatId = process.env.TELEGRAM_CHAT_ID;
       
@@ -121,9 +124,11 @@ async function startServer() {
         : (zone === 'buffer' ? 'Buffer 1 KM (Konsesi / Hauling Road)' : 'Sekitar Wilayah Konsesi Adaro');
 
       const confText = confidence ? `\n🎯 *Keyakinan*: ${confidence}%` : '';
+      const sourceText = hotspotSource || 'Multi-Satelit Terintegrasi (Jepang / BRIN / SiPongi / BMKG)';
 
       const pesan = `${header}\n\n` +
         `🔥 *ID Hotspot*: \`${id}\`\n` +
+        `🛰️ *Sumber Satelit*: ${sourceText}\n` +
         `📍 *Koordinat*: \`${lat}, ${lng}\`\n` +
         `🗺️ *Lokasi*: ${location || 'Sedang dimuat...'}\n` +
         `🕒 *Waktu Satelit*: ${date}${confText}\n` +
@@ -206,7 +211,7 @@ async function startServer() {
       
       // Area bounding box covers Kelanis Port (114.85°E, -2.26°S) up to Mine Concessions (115.65°E, -2.05°S)
       const bbox = "114.85,-2.35,115.65,-2.05";
-      const sources = ["VIIRS_SNPP_NRT", "MODIS_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"];
+      const sources = ["VIIRS_SNPP_NRT", "MODIS_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT", "LANDSAT_NRT"];
       
       let header = "";
       const seen = new Set();
@@ -453,8 +458,8 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    // Start 24/7 background hotspot monitor
-    startAutoNotifier(5);
+    // Start 24/7 background hotspot monitor (Interval: 10 menit)
+    startAutoNotifier(10);
   });
 }
 
