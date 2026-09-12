@@ -137,13 +137,14 @@ export function getBufferCoordinates(): Coordinates[][] {
 }
 
 export function getHaulRoadBufferCoordinates(): Coordinates[][] {
-  if (!haulRoadBuffer) return [];
-  if (haulRoadBuffer.geometry.type === "Polygon") {
-    return [haulRoadBuffer.geometry.coordinates[0].map(
+  const targetBuffer = unifiedHaulRoadAndKelanisBuffer || haulRoadBuffer;
+  if (!targetBuffer) return [];
+  if (targetBuffer.geometry.type === "Polygon") {
+    return [targetBuffer.geometry.coordinates[0].map(
       (coord: any) => ({ lat: coord[1], lng: coord[0] })
     )];
-  } else if (haulRoadBuffer.geometry.type === "MultiPolygon") {
-    return haulRoadBuffer.geometry.coordinates.map((poly: any) => 
+  } else if (targetBuffer.geometry.type === "MultiPolygon") {
+    return targetBuffer.geometry.coordinates.map((poly: any) => 
       poly[0].map((coord: any) => ({ lat: coord[1], lng: coord[0] }))
     );
   }
@@ -159,6 +160,29 @@ import { HaulRoadMilestone } from "./types";
 // Haul road corridor buffer (1 kilometer along haul road)
 const haulRoadLine = turf.lineString(ADARO_HAUL_ROAD_COORDINATES.map(([lat, lng]) => [lng, lat]));
 export const haulRoadBuffer = turf.buffer(haulRoadLine, 1.0, { units: 'kilometers' });
+
+// Poligon Area Pelabuhan Khusus Batubara Kelanis (Sungai Barito - KM 0)
+export const kelanisPortPolygon = turf.polygon([[
+  ...KELANIS_PORT_COORDINATES.map(([lt, lg]) => [lg, lt]),
+  [KELANIS_PORT_COORDINATES[0][1], KELANIS_PORT_COORDINATES[0][0]]
+]]);
+
+// Buffer 1 KM Area Kelanis Port (melingkupi Sungai Barito & dermaga pengapalan tongkang)
+export const kelanisPortBuffer = turf.buffer(kelanisPortPolygon, 1.0, { units: 'kilometers' });
+
+// Penggabungan (Union) Buffer 1 KM Hauling Road dan Buffer 1 KM Kelanis Port
+export const unifiedHaulRoadAndKelanisBuffer = (() => {
+  try {
+    const unioned = turf.union(turf.featureCollection([haulRoadBuffer, kelanisPortBuffer]));
+    return unioned || haulRoadBuffer;
+  } catch (err) {
+    return haulRoadBuffer;
+  }
+})();
+
+export function getKelanisPortCoordinates(): Coordinates[] {
+  return KELANIS_PORT_COORDINATES.map(([lat, lng]) => ({ lat, lng }));
+}
 
 // Pre-calculated milestone markers per 1 km along the hauling road
 export const ADARO_HAUL_ROAD_MILESTONES: HaulRoadMilestone[] = (() => {
@@ -195,11 +219,6 @@ export const ADARO_HAUL_ROAD_MILESTONES: HaulRoadMilestone[] = (() => {
   return milestones;
 })();
 
-const kelanisPortPolygon = turf.polygon([[
-  ...KELANIS_PORT_COORDINATES.map(([lt, lg]) => [lg, lt]),
-  [KELANIS_PORT_COORDINATES[0][1], KELANIS_PORT_COORDINATES[0][0]]
-]]);
-
 export function checkHotspotZone(lat: number, lng: number): "iupk" | "buffer" | "outside" {
   const point = turf.point([lng, lat]);
   if (turf.booleanPointInPolygon(point, iupkPolygon)) {
@@ -209,11 +228,11 @@ export function checkHotspotZone(lat: number, lng: number): "iupk" | "buffer" | 
   if (turf.booleanPointInPolygon(point, kelanisPortPolygon)) {
     return "iupk";
   }
-  // Check 1 km buffer of IUPK (which includes Dahai corridor buffer) or Haul Road
+  // Check 1 km buffer of IUPK (which includes Dahai corridor buffer) or Haul Road + Kelanis
   if (turf.booleanPointInPolygon(point, iupkBuffer)) {
     return "buffer";
   }
-  if (turf.booleanPointInPolygon(point, haulRoadBuffer)) {
+  if (turf.booleanPointInPolygon(point, unifiedHaulRoadAndKelanisBuffer)) {
     return "buffer";
   }
   // Explicit safeguard for Adaro concession bounding box area

@@ -6,13 +6,23 @@ import { SecurityPost, HaulRoadMilestone } from "./types";
  * Sistem Koordinat: WGS 1984 (Geographic / EPSG:4326) - Disesuaikan dengan Peta Dasar (Basemap)
  */
 
-// Area Pelabuhan Khusus Batubara Kelanis (Sungai Barito)
+// Area Pelabuhan Khusus Batubara Kelanis (Sungai Barito - KM 0 Hauling Road)
 export const KELANIS_PORT_COORDINATES: [number, number][] = [
-  [-2.235, 114.865],
-  [-2.235, 114.905],
-  [-2.285, 114.905],
-  [-2.285, 114.865],
-  [-2.235, 114.865],
+  [-2.2865, 114.8705], // Sisi barat laut dermaga tongkang
+  [-2.2868, 114.8755], // Sisi utara stockpile batubara
+  [-2.2885, 114.8778], // Sudut timur laut area terminal
+  [-2.2915, 114.8785], // Sisi timur area perkantoran & workshop
+  [-2.29423, 114.87765], // Titik Gerbang Masuk KM 0 Hauling Road
+  [-2.2970, 114.8780], // Sisi timur settling pond
+  [-2.2995, 114.8770], // Sudut tenggara fasilitas pelabuhan
+  [-2.3015, 114.8745], // Sisi selatan kolam sedimentasi
+  [-2.3012, 114.8710], // Sudut barat daya pelabuhan
+  [-2.2990, 114.8698], // Tepi Sungai Barito selatan
+  [-2.2965, 114.8688], // Fasilitas Jetty 2 (Barge Loading selatan)
+  [-2.2935, 114.8682], // Fasilitas Jetty 1 (Barge Loading conveyor utama)
+  [-2.2905, 114.8688], // Area tambat tongkang utara
+  [-2.2880, 114.8698], // Tepi Sungai Barito utara
+  [-2.2865, 114.8705], // Menutup poligon
 ];
 
 // 2. Jalur Hauling Road PT Adaro Indonesia (KM 0 Kelanis s/d KM 85+ Tambang)
@@ -830,9 +840,9 @@ export const ADARO_STRATEGIC_POSTS: SecurityPost[] = [
     name: "Pelabuhan Khusus Kelanis Port",
     kelas: 1,
     category: "Pelabuhan & Terminal Batubara",
-    lat: -2.2602,
-    lng: 114.8780,
-    description: "Terminal pengapalan batubara Adaro di Sungai Barito (ISPS Code Compliant)",
+    lat: -2.2935,
+    lng: 114.8725,
+    description: "Terminal pengapalan batubara Adaro di Sungai Barito (ISPS Code Compliant - KM 0)",
   },
   {
     id: "post-gate-pasar-panas",

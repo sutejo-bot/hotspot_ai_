@@ -19,7 +19,8 @@ import {
   ADARO_HAUL_ROAD_MILESTONES
 } from "../data";
 import { 
-  ADARO_HAUL_ROAD_COORDINATES
+  ADARO_HAUL_ROAD_COORDINATES,
+  KELANIS_PORT_COORDINATES
 } from "../adaroSecurityData";
 import { formatDateWITA, formatTimeWITA, fetchAddressFromCoordinates } from "../utils";
 import { 
@@ -117,7 +118,7 @@ function MapController({
       }
     }
     else if (focusMode === "kelanis") {
-      map.flyTo([-2.2602, 114.8780], 14, { duration: 1 });
+      map.flyTo([-2.2935, 114.8715], 15, { duration: 1 });
     }
   }, [selectedHotspot, iupkPolygons, focusMode, map, markerRefs]);
 
@@ -371,15 +372,49 @@ export default function MapComponent({
                 positions={haulRoadBufferMultiPolygons} 
                 pathOptions={{
                   fillColor: "#eab308",
-                  fillOpacity: 0.05,
-                  color: "#ca8a04",
-                  weight: 1.2,
-                  dashArray: "3, 3",
+                  fillOpacity: 0.04,
+                  color: "#d97706",
+                  weight: 2,
+                  dashArray: "6, 6",
                   interactive: false
                 }} 
               />
             )}
           </>
+        )}
+
+        {/* Label Sungai Barito (seperti pada referensi visual di area Kelanis Port) */}
+        <Marker
+          position={[-2.2942, 114.8638]}
+          interactive={false}
+          zIndexOffset={50}
+          icon={L.divIcon({
+            html: `<div style="transform: rotate(-74deg); font-family: system-ui, -apple-system, sans-serif; font-weight: 800; font-size: 15px; letter-spacing: 0.5px; color: #ffffff; text-shadow: -1.5px -1.5px 0 #0284c7, 1.5px -1.5px 0 #0284c7, -1.5px 1.5px 0 #0284c7, 1.5px 1.5px 0 #0284c7, 0 2px 4px rgba(0,0,0,0.7); white-space: nowrap; user-select: none; pointer-events: none;">Sungai Barito</div>`,
+            className: "barito-river-label",
+            iconSize: [140, 32],
+            iconAnchor: [70, 16],
+          })}
+        />
+
+        {/* 3. Area Khusus Pelabuhan Kelanis Port (KM 0) */}
+        {showIupk && (
+          <Polygon 
+            positions={KELANIS_PORT_COORDINATES} 
+            pathOptions={{
+              fillColor: "#0284c7",
+              fillOpacity: 0.03,
+              color: "#0284c7",
+              weight: 1.5,
+              dashArray: "4, 4",
+            }} 
+          >
+            <Tooltip sticky>
+              <div className="p-0.5">
+                <span className="font-bold text-xs text-slate-900 block">Pelabuhan Khusus Batubara Kelanis (Port)</span>
+                <span className="text-[11px] text-slate-600 block">Terminal Pengapalan Sungai Barito & Titik KM 0 Hauling</span>
+              </div>
+            </Tooltip>
+          </Polygon>
         )}
 
         {/* 4. Dedicated Haul Road (Kelanis KM 0 to KM 71) */}
@@ -535,7 +570,10 @@ export default function MapComponent({
           <span>IUPK Tambang</span>
         </button>
         <button
-          onClick={() => setFocusMode("kelanis")}
+          onClick={() => {
+            setMapType("satellite");
+            setFocusMode("kelanis");
+          }}
           className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1.5 ${
             focusMode === "kelanis" ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"
           }`}
@@ -582,7 +620,11 @@ export default function MapComponent({
                   Tambang
                 </button>
                 <button
-                  onClick={() => setFocusMode("kelanis")}
+                  onClick={() => {
+                    setMapType("satellite");
+                    setFocusMode("kelanis");
+                    setShowLayerPanel(false);
+                  }}
                   className="p-1.5 text-[11px] bg-slate-800 hover:bg-slate-700 rounded text-center text-slate-200"
                 >
                   Kelanis

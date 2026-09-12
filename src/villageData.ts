@@ -97,7 +97,7 @@ export const ADARO_CORRIDOR_VILLAGES: LocalVillage[] = [
   { name: "Pasar Panas", kecamatan: "Benua Lima", kabupaten: "Barito Timur", lat: -2.3550, lng: 115.1450 },
 
   // --- KABUPATEN BARITO SELATAN (Area Kelanis Port & KM 0 - KM 20) ---
-  { name: "Kelanis", kecamatan: "Dusun Hilir", kabupaten: "Barito Selatan", lat: -2.2650, lng: 114.8650 },
+  { name: "Kelanis (Pelabuhan Port)", kecamatan: "Dusun Hilir", kabupaten: "Barito Selatan", lat: -2.2935, lng: 114.8725 },
   { name: "Teluk Timbau", kecamatan: "Dusun Hilir", kabupaten: "Barito Selatan", lat: -2.2450, lng: 114.8450 },
   { name: "Batampang", kecamatan: "Dusun Hilir", kabupaten: "Barito Selatan", lat: -2.2250, lng: 114.8550 },
   { name: "Mangkarap", kecamatan: "Dusun Selatan", kabupaten: "Barito Selatan", lat: -2.2550, lng: 114.9050 },
