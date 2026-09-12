@@ -17,28 +17,64 @@ export default function AutoNotifyModal({
 }: AutoNotifyModalProps) {
   const [isRunningManual, setIsRunningManual] = useState(false);
   const [manualMessage, setManualMessage] = useState<string | null>(null);
+  const [manualMessageType, setManualMessageType] = useState<"success" | "error" | "info">("info");
 
   if (!isOpen) return null;
 
   const handleRunNow = async () => {
     setIsRunningManual(true);
     setManualMessage(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
     try {
-      const res = await fetch("/api/auto-notify/run", { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
+      const res = await fetch("/api/auto-notify/run", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      const text = await res.text();
+      let data: any = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+      }
+
+      if (!res.ok) {
+        setManualMessageType("error");
+        setManualMessage(
+          data?.error || 
+          `Server sedang memproses atau memulai ulang (HTTP ${res.status}). Silakan coba beberapa detik lagi.`
+        );
+        return;
+      }
+
+      if (data && data.success) {
         await onRefreshStatus();
         const count = data?.result?.newHotspots || 0;
+        const totalChecked = data?.result?.checked || 0;
+        setManualMessageType(count > 0 ? "success" : "info");
         setManualMessage(
           count > 0
-            ? `Berhasil! Terdeteksi ${count} titik api baru dan notifikasi Telegram telah dikirim.`
-            : "Pemeriksaan selesai. Tidak ada titik api baru di area konsesi saat ini."
+            ? `Berhasil! Terdeteksi ${count} titik api baru dan peringatan darurat telah dikirim ke Telegram.`
+            : `Pemeriksaan selesai (${totalChecked} hotspot aktif diverifikasi). Tidak ada anomali titik api baru di area konsesi saat ini.`
         );
       } else {
-        setManualMessage(`Gagal: ${data.error || "Terjadi kesalahan"}`);
+        setManualMessageType("error");
+        setManualMessage(`Gagal: ${data?.error || "Gagal memproses respons dari server pemantau."}`);
       }
     } catch (err: any) {
-      setManualMessage(`Gagal menghubungi server: ${err.message}`);
+      setManualMessageType("error");
+      if (err?.name === "AbortError") {
+        setManualMessage("Waktu pemeriksaan melebihi batas (timeout). Server sedang sibuk, silakan coba sesaat lagi.");
+      } else {
+        setManualMessage(`Koneksi terputus saat menghubungi server. Silakan coba kembali.`);
+      }
     } finally {
       setIsRunningManual(false);
     }
@@ -164,8 +200,16 @@ export default function AutoNotifyModal({
           </div>
 
           {manualMessage && (
-            <div className="p-3 rounded-xl bg-slate-800 border border-blue-500/40 text-xs text-blue-300 animate-in fade-in">
-              {manualMessage}
+            <div className={cn(
+              "p-3 rounded-xl border text-xs flex items-start gap-2 animate-in fade-in transition-all",
+              manualMessageType === "success" && "bg-emerald-950/40 border-emerald-500/40 text-emerald-300",
+              manualMessageType === "error" && "bg-rose-950/40 border-rose-500/40 text-rose-300",
+              manualMessageType === "info" && "bg-blue-950/40 border-blue-500/40 text-blue-300"
+            )}>
+              {manualMessageType === "success" && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
+              {manualMessageType === "error" && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />}
+              {manualMessageType === "info" && <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />}
+              <div className="flex-1 leading-relaxed">{manualMessage}</div>
             </div>
           )}
 

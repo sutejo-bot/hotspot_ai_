@@ -160,8 +160,10 @@ async function startServer() {
   // API route to get auto-notifier status
   app.get("/api/auto-notify/status", (req, res) => {
     try {
+      res.setHeader("Content-Type", "application/json");
       res.json(getAutoNotifierStatus());
     } catch (err: any) {
+      res.setHeader("Content-Type", "application/json");
       res.status(500).json({ error: err.message || "Failed to get status" });
     }
   });
@@ -170,9 +172,13 @@ async function startServer() {
   app.post("/api/auto-notify/run", async (req, res) => {
     try {
       const result = await runHotspotCheckCycle();
-      res.json({ success: true, result, status: getAutoNotifierStatus() });
+      const status = getAutoNotifierStatus();
+      res.setHeader("Content-Type", "application/json");
+      res.json({ success: true, result, status });
     } catch (error: any) {
-      res.status(500).json({ error: error?.message || "Failed to run check cycle" });
+      console.error("[API Error] /api/auto-notify/run:", error);
+      res.setHeader("Content-Type", "application/json");
+      res.status(500).json({ success: false, error: error?.message || "Failed to run check cycle" });
     }
   });
 

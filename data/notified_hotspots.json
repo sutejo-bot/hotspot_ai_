@@ -1,6 +1,6 @@
 {
   "createdAt": "2026-09-11T23:22:26.623Z",
-  "updatedAt": "2026-09-11T23:22:34.138Z",
+  "updatedAt": "2026-09-12T01:37:14.037Z",
   "hotspots": {
     "HS-22118-1154946-0911616": {
       "id": "HS-22118-1154946-0911616",
@@ -302,5 +302,7 @@
       "telegramSent": false,
       "waSent": false
     }
-  }
+  },
+  "lastRunTime": "2026-09-12T01:37:14.037Z",
+  "lastCheckStatus": "Pemeriksaan selesai: Tidak ada titik api baru di area konsesi (0 hotspot aktif terpantau aman)."
 }

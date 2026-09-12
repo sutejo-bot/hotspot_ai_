@@ -42,6 +42,8 @@ interface StoredHotspot {
 interface StorageData {
   createdAt: string;
   updatedAt: string;
+  lastRunTime?: string | null;
+  lastCheckStatus?: string;
   hotspots: Record<string, StoredHotspot>;
 }
 
@@ -51,6 +53,15 @@ let lastRunTime: string | null = null;
 let lastCheckStatus = "Belum berjalan";
 let lastNewCount = 0;
 let timerId: NodeJS.Timeout | null = null;
+
+// Mutex & caching for checking cycle
+let activeCheckPromise: Promise<{
+  checked: number;
+  newHotspots: number;
+  notified: string[];
+}> | null = null;
+let cachedFirmsCsv: { data: string[]; timestamp: number } | null = null;
+const FIRMS_CACHE_TTL_MS = 60 * 1000; // 60s cache
 
 function ensureStorage(): StorageData {
   if (storageCache) return storageCache;
@@ -63,6 +74,12 @@ function ensureStorage(): StorageData {
     if (fs.existsSync(STORAGE_FILE)) {
       const raw = fs.readFileSync(STORAGE_FILE, "utf-8");
       storageCache = JSON.parse(raw);
+      if (storageCache?.lastRunTime && !lastRunTime) {
+        lastRunTime = storageCache.lastRunTime;
+      }
+      if (storageCache?.lastCheckStatus && lastCheckStatus === "Belum berjalan") {
+        lastCheckStatus = storageCache.lastCheckStatus;
+      }
       return storageCache!;
     }
   } catch (err) {
@@ -72,6 +89,8 @@ function ensureStorage(): StorageData {
   storageCache = {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    lastRunTime: null,
+    lastCheckStatus: "Siap",
     hotspots: {}
   };
   saveStorage(storageCache);
@@ -84,6 +103,8 @@ function saveStorage(data: StorageData) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     data.updatedAt = new Date().toISOString();
+    data.lastRunTime = lastRunTime;
+    data.lastCheckStatus = lastCheckStatus;
     fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2), "utf-8");
     storageCache = data;
   } catch (err) {
@@ -198,7 +219,8 @@ async function sendTelegramAlert(hotspot: {
         chat_id: chatId,
         text: pesan,
         parse_mode: "Markdown"
-      })
+      }),
+      signal: AbortSignal.timeout(6000)
     });
 
     if (!res.ok) {
@@ -258,7 +280,8 @@ async function sendWhatsAppAlert(hotspot: {
         Authorization: token,
         "Content-Type": "application/x-www-form-urlencoded"
       },
-      body: formData.toString()
+      body: formData.toString(),
+      signal: AbortSignal.timeout(6000)
     });
 
     return res.ok;
@@ -273,187 +296,228 @@ export async function runHotspotCheckCycle(): Promise<{
   newHotspots: number;
   notified: string[];
 }> {
-  lastRunTime = new Date().toISOString();
-  const apiKey = process.env.NASA_API_KEY;
-
-  if (!apiKey) {
-    lastCheckStatus = "Error: NASA_API_KEY belum dikonfigurasi di server";
-    console.warn(`[AutoNotifier] ⚠️ ${lastCheckStatus}`);
-    return { checked: 0, newHotspots: 0, notified: [] };
+  if (activeCheckPromise) {
+    console.log("[AutoNotifier] Siklus pemantauan sedang berjalan, menggunakan eksekusi aktif...");
+    return activeCheckPromise;
   }
 
-  const storage = ensureStorage();
-  const isFirstRunEver = Object.keys(storage.hotspots).length === 0;
+  activeCheckPromise = (async () => {
+    lastRunTime = new Date().toISOString();
+    const apiKey = process.env.NASA_API_KEY;
 
-  // NASA FIRMS Bounding Box for Adaro Concession + Kelanis Port + Hauling Road
-  const bbox = "114.85,-2.35,115.65,-2.05";
-  const sources = ["VIIRS_SNPP_NRT", "MODIS_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"];
+    if (!apiKey) {
+      lastCheckStatus = "Error: NASA_API_KEY belum dikonfigurasi di server";
+      console.warn(`[AutoNotifier] ⚠️ ${lastCheckStatus}`);
+      return { checked: 0, newHotspots: 0, notified: [] };
+    }
 
-  try {
-    const csvResults = await Promise.all(
-      sources.map(async (src) => {
-        const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${apiKey}/${src}/${bbox}/1`;
-        try {
-          const res = await fetch(url);
-          if (!res.ok) return "";
-          return await res.text();
-        } catch {
-          return "";
+    const storage = ensureStorage();
+    const isFirstRunEver = Object.keys(storage.hotspots).length === 0;
+
+    // NASA FIRMS Bounding Box for Adaro Concession + Kelanis Port + Hauling Road
+    const bbox = "114.85,-2.35,115.65,-2.05";
+    const sources = ["VIIRS_SNPP_NRT", "MODIS_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT"];
+
+    try {
+      let csvResults: string[] = [];
+      if (cachedFirmsCsv && (Date.now() - cachedFirmsCsv.timestamp < FIRMS_CACHE_TTL_MS)) {
+        csvResults = cachedFirmsCsv.data;
+      } else {
+        csvResults = await Promise.all(
+          sources.map(async (src) => {
+            const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${apiKey}/${src}/${bbox}/1`;
+            try {
+              const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+              if (!res.ok) return "";
+              return await res.text();
+            } catch (err: any) {
+              console.warn(`[AutoNotifier] FIRMS fetch gagal untuk ${src}:`, err?.message || err);
+              return "";
+            }
+          })
+        );
+        if (csvResults.some(c => c.length > 0)) {
+          cachedFirmsCsv = { data: csvResults, timestamp: Date.now() };
         }
-      })
-    );
+      }
 
-    const detectedCandidates: Array<{
-      id: string;
-      lat: number;
-      lng: number;
-      confidence: number;
-      detectedAt: Date;
-      zone: string;
-    }> = [];
+      const detectedCandidates: Array<{
+        id: string;
+        lat: number;
+        lng: number;
+        confidence: number;
+        detectedAt: Date;
+        zone: string;
+      }> = [];
 
-    const seenIds = new Set<string>();
+      const seenIds = new Set<string>();
 
-    for (const text of csvResults) {
-      const lines = text.trim().split("\n");
-      if (lines.length <= 1) continue;
+      for (const text of csvResults) {
+        const lines = text.trim().split("\n");
+        if (lines.length <= 1) continue;
 
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line || line.startsWith("latitude")) continue;
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line || line.startsWith("latitude")) continue;
 
-        const cols = line.split(",");
-        const lat = parseFloat(cols[0]);
-        const lng = parseFloat(cols[1]);
-        if (isNaN(lat) || isNaN(lng)) continue;
+          const cols = line.split(",");
+          const lat = parseFloat(cols[0]);
+          const lng = parseFloat(cols[1]);
+          if (isNaN(lat) || isNaN(lng)) continue;
 
-        const zone = checkHotspotZone(lat, lng);
-        if (zone === "outside") continue;
+          const zone = checkHotspotZone(lat, lng);
+          if (zone === "outside") continue;
 
-        const rawConf = cols[8] || cols[9] || "50";
-        let confidence = 50;
-        if (rawConf === "h") confidence = 95;
-        else if (rawConf === "n") confidence = 75;
-        else if (rawConf === "l") confidence = 30;
-        else if (!isNaN(parseInt(rawConf, 10))) confidence = parseInt(rawConf, 10);
+          const rawConf = cols[8] || cols[9] || "50";
+          let confidence = 50;
+          if (rawConf === "h") confidence = 95;
+          else if (rawConf === "n") confidence = 75;
+          else if (rawConf === "l") confidence = 30;
+          else if (!isNaN(parseInt(rawConf, 10))) confidence = parseInt(rawConf, 10);
 
-        const acqDate = cols[5] || ""; // YYYY-MM-DD
-        const acqTime = cols[6] || ""; // HHMM UTC
+          const acqDate = cols[5] || ""; // YYYY-MM-DD
+          const acqTime = cols[6] || ""; // HHMM UTC
 
-        let detectedAt = new Date();
-        if (acqDate) {
-          const parts = acqDate.split("-").map(Number);
-          const hours = acqTime ? acqTime.padStart(4, "0").substring(0, 2) : "00";
-          const mins = acqTime ? acqTime.padStart(4, "0").substring(2, 4) : "00";
-          detectedAt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], parseInt(hours, 10), parseInt(mins, 10)));
+          let detectedAt = new Date();
+          if (acqDate) {
+            const parts = acqDate.split("-").map(Number);
+            const hours = acqTime ? acqTime.padStart(4, "0").substring(0, 2) : "00";
+            const mins = acqTime ? acqTime.padStart(4, "0").substring(2, 4) : "00";
+            detectedAt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], parseInt(hours, 10), parseInt(mins, 10)));
+          }
+
+          const latStr = Math.abs(lat).toFixed(4).replace(".", "");
+          const lngStr = Math.abs(lng).toFixed(4).replace(".", "");
+          const timePart = `${acqDate.replace(/-/g, "").slice(4)}${acqTime || ""}`;
+          const id = `HS-${latStr}-${lngStr}-${timePart}`;
+
+          if (!seenIds.has(id)) {
+            seenIds.add(id);
+            detectedCandidates.push({
+              id,
+              lat,
+              lng,
+              confidence,
+              detectedAt,
+              zone
+            });
+          }
         }
+      }
 
-        const latStr = Math.abs(lat).toFixed(4).replace(".", "");
-        const lngStr = Math.abs(lng).toFixed(4).replace(".", "");
-        const timePart = `${acqDate.replace(/-/g, "").slice(4)}${acqTime || ""}`;
-        const id = `HS-${latStr}-${lngStr}-${timePart}`;
+      // If first run ever, establish baseline so we don't spam historical hotspots
+      if (isFirstRunEver) {
+        console.log(`[AutoNotifier] 📋 Inisialisasi awal: Menemukan ${detectedCandidates.length} titik api saat ini. Ditandai sebagai baseline awal.`);
+        for (const c of detectedCandidates) {
+          storage.hotspots[c.id] = {
+            id: c.id,
+            lat: c.lat,
+            lng: c.lng,
+            detectedAt: c.detectedAt.toISOString(),
+            notifiedAt: new Date().toISOString(),
+            location: "Wilayah Operasional Adaro",
+            zone: c.zone,
+            status: "initial_baseline",
+            telegramSent: false,
+            waSent: false
+          };
+        }
+        lastCheckStatus = `Inisialisasi berhasil: ${detectedCandidates.length} hotspot tercatat sebagai baseline.`;
+        lastNewCount = 0;
+        saveStorage(storage);
+        return { checked: detectedCandidates.length, newHotspots: 0, notified: [] };
+      }
 
-        if (!seenIds.has(id)) {
-          seenIds.add(id);
-          detectedCandidates.push({
-            id,
-            lat,
-            lng,
-            confidence,
-            detectedAt,
-            zone
+      // Identify genuine new hotspots that are not in storage
+      const newHotspots = detectedCandidates.filter((c) => !storage.hotspots[c.id]);
+      const notifiedIds: string[] = [];
+
+      if (newHotspots.length > 0) {
+        console.log(`[AutoNotifier] 🚨 TERDETEKSI ${newHotspots.length} TITIK API BARU! Mengirim notifikasi otomatis...`);
+
+        // Limit individual alert sends to at most 5 per cycle to prevent rate-limits and timeouts
+        const alertsToSend = newHotspots.slice(0, 5);
+
+        for (const h of alertsToSend) {
+          const locationName = await reverseGeocode(h.lat, h.lng);
+          const formattedDate = formatWITA(h.detectedAt);
+
+          const tgSent = await sendTelegramAlert({
+            id: h.id,
+            lat: h.lat,
+            lng: h.lng,
+            location: locationName,
+            date: formattedDate,
+            zone: h.zone,
+            confidence: h.confidence
           });
+
+          const waSent = await sendWhatsAppAlert({
+            id: h.id,
+            lat: h.lat,
+            lng: h.lng,
+            location: locationName,
+            date: formattedDate,
+            zone: h.zone,
+            confidence: h.confidence
+          });
+
+          storage.hotspots[h.id] = {
+            id: h.id,
+            lat: h.lat,
+            lng: h.lng,
+            detectedAt: h.detectedAt.toISOString(),
+            notifiedAt: new Date().toISOString(),
+            location: locationName,
+            zone: h.zone,
+            status: "notified",
+            telegramSent: tgSent,
+            waSent: waSent
+          };
+
+          notifiedIds.push(h.id);
         }
-      }
-    }
 
-    // If first run ever, establish baseline so we don't spam historical hotspots
-    if (isFirstRunEver) {
-      console.log(`[AutoNotifier] 📋 Inisialisasi awal: Menemukan ${detectedCandidates.length} titik api saat ini. Ditandai sebagai baseline awal.`);
-      for (const c of detectedCandidates) {
-        storage.hotspots[c.id] = {
-          id: c.id,
-          lat: c.lat,
-          lng: c.lng,
-          detectedAt: c.detectedAt.toISOString(),
-          notifiedAt: new Date().toISOString(),
-          location: "Wilayah Operasional Adaro",
-          zone: c.zone,
-          status: "initial_baseline",
-          telegramSent: false,
-          waSent: false
-        };
-      }
-      saveStorage(storage);
-      lastCheckStatus = `Inisialisasi berhasil: ${detectedCandidates.length} hotspot tercatat sebagai baseline.`;
-      lastNewCount = 0;
-      return { checked: detectedCandidates.length, newHotspots: 0, notified: [] };
-    }
+        // Record any remaining new hotspots as tracked
+        for (let i = 5; i < newHotspots.length; i++) {
+          const h = newHotspots[i];
+          storage.hotspots[h.id] = {
+            id: h.id,
+            lat: h.lat,
+            lng: h.lng,
+            detectedAt: h.detectedAt.toISOString(),
+            notifiedAt: new Date().toISOString(),
+            location: "Wilayah Operasional Adaro",
+            zone: h.zone,
+            status: "notified",
+            telegramSent: false,
+            waSent: false
+          };
+        }
 
-    // Identify genuine new hotspots that are not in storage
-    const newHotspots = detectedCandidates.filter((c) => !storage.hotspots[c.id]);
-    const notifiedIds: string[] = [];
-
-    if (newHotspots.length > 0) {
-      console.log(`[AutoNotifier] 🚨 TERDETEKSI ${newHotspots.length} TITIK API BARU! Mengirim notifikasi otomatis...`);
-
-      for (const h of newHotspots) {
-        const locationName = await reverseGeocode(h.lat, h.lng);
-        const formattedDate = formatWITA(h.detectedAt);
-
-        const tgSent = await sendTelegramAlert({
-          id: h.id,
-          lat: h.lat,
-          lng: h.lng,
-          location: locationName,
-          date: formattedDate,
-          zone: h.zone,
-          confidence: h.confidence
-        });
-
-        const waSent = await sendWhatsAppAlert({
-          id: h.id,
-          lat: h.lat,
-          lng: h.lng,
-          location: locationName,
-          date: formattedDate,
-          zone: h.zone,
-          confidence: h.confidence
-        });
-
-        storage.hotspots[h.id] = {
-          id: h.id,
-          lat: h.lat,
-          lng: h.lng,
-          detectedAt: h.detectedAt.toISOString(),
-          notifiedAt: new Date().toISOString(),
-          location: locationName,
-          zone: h.zone,
-          status: "notified",
-          telegramSent: tgSent,
-          waSent: waSent
-        };
-
-        notifiedIds.push(h.id);
+        lastCheckStatus = `Sukses: ${newHotspots.length} hotspot baru terdeteksi dan notifikasi otomatis dikirim.`;
+        saveStorage(storage);
+      } else {
+        lastCheckStatus = `Pemeriksaan selesai: Tidak ada titik api baru di area konsesi (${detectedCandidates.length} hotspot aktif terpantau aman).`;
+        saveStorage(storage);
       }
 
-      saveStorage(storage);
-      lastCheckStatus = `Sukses: ${newHotspots.length} hotspot baru terdeteksi dan notifikasi otomatis dikirim.`;
-    } else {
-      lastCheckStatus = `Pemeriksaan selesai: Tidak ada titik api baru di area konsesi (${detectedCandidates.length} hotspot aktif terpantau aman).`;
+      lastNewCount = newHotspots.length;
+      return {
+        checked: detectedCandidates.length,
+        newHotspots: newHotspots.length,
+        notified: notifiedIds
+      };
+    } catch (err: any) {
+      lastCheckStatus = `Error pemeriksaan: ${err?.message || err}`;
+      console.error("[AutoNotifier] Error saat menjalankan siklus pemantauan:", err);
+      return { checked: 0, newHotspots: 0, notified: [] };
     }
+  })().finally(() => {
+    activeCheckPromise = null;
+  });
 
-    lastNewCount = newHotspots.length;
-    return {
-      checked: detectedCandidates.length,
-      newHotspots: newHotspots.length,
-      notified: notifiedIds
-    };
-  } catch (err: any) {
-    lastCheckStatus = `Error pemeriksaan: ${err?.message || err}`;
-    console.error("[AutoNotifier] Error saat menjalankan siklus pemantauan:", err);
-    return { checked: 0, newHotspots: 0, notified: [] };
-  }
+  return activeCheckPromise;
 }
 
 // Start autonomous background scheduler
