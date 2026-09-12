@@ -33,7 +33,7 @@ const SidebarAddress = ({ lat, lng, initialAddress }: { lat: number, lng: number
   }, [lat, lng, initialAddress]);
 
   return (
-    <div className="text-[11px] text-slate-400 mt-2 p-2 bg-slate-800/50 rounded-lg border border-slate-700">
+    <div className="text-[10px] text-slate-400 mt-1.5 p-1.5 bg-slate-900/60 rounded-md border border-slate-800 leading-tight">
       <span className="font-semibold text-slate-300">Lokasi:</span> {address}
     </div>
   );
@@ -129,107 +129,92 @@ export default function Sidebar({
   return (
     <>
     <div className="w-full h-full bg-[#111827] border-r border-slate-800 flex flex-col z-10 relative">
-      {/* Sidebar Header */}
-      <div className="p-3.5 sm:p-4 border-b border-slate-800 bg-slate-900/60 shrink-0">
+      {/* Sidebar Header - Slim & compact */}
+      <div className="p-2.5 sm:p-3 border-b border-slate-800 bg-slate-900/70 shrink-0">
         <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xs font-bold text-slate-300 uppercase tracking-widest">
+          <div className="w-full">
+            <div className="flex items-center justify-between gap-1.5">
+              <h2 className="text-[11px] font-bold text-slate-200 uppercase tracking-wider truncate">
                 Monitoring Titik Api ({hotspots.length})
               </h2>
               {newCount > 0 && (
-                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-red-600 text-white rounded-full animate-pulse">
+                <span className="px-1.5 py-0.5 text-[9px] font-bold bg-red-600 text-white rounded-full animate-pulse shrink-0">
                   {newCount} Baru
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-              <span className="font-semibold text-slate-300 flex items-center gap-1.5 mb-1">
-                <Satellite className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                <span>Sumber Data Satelit Terintegrasi:</span>
-              </span>
-              <span className="flex flex-wrap gap-1 text-[10px]">
-                <span className="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800/60 font-medium" title="Satelit Geostasioner Jepang Himawari-8 & 9 (JMA / JAXA)">
-                  Jepang (Himawari-9)
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-medium" title="Sistem Pemantauan Karhutla Nasional - Kementerian Lingkungan Hidup dan Kehutanan">
-                  SiPongi+ (KLHK)
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 font-medium" title="Pusat Riset Geoinformatika BRIN - INDOFIRMS">
-                  BRIN
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 font-medium" title="Badan Meteorologi, Klimatologi, dan Geofisika">
-                  BMKG
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/60 font-medium" title="NASA Earthdata FIRMS & NOAA (VIIRS, MODIS, Landsat)">
-                  NASA / NOAA
-                </span>
-              </span>
-              <span className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
-                <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-                <span>Anti-Tumpang Tindih Aktif: Klaster 1.5 km / 24 Jam</span>
-              </span>
-            </p>
+            
+            {/* Integrated Satellite badges - compact flex wrap */}
+            <div className="mt-1.5 text-[10px] text-slate-400">
+              <div className="flex items-center gap-1 text-[10px] text-slate-300 font-medium mb-1">
+                <Satellite className="w-3 h-3 text-blue-400 shrink-0" />
+                <span>Data: Himawari-9, SiPongi+, BRIN, BMKG, NASA</span>
+              </div>
+              <div className="flex items-center gap-1 text-[9px] text-emerald-400/90 font-mono">
+                <ShieldCheck className="w-2.5 h-2.5 shrink-0" />
+                <span>Klaster Anti-Duplikasi 1.5 km</span>
+              </div>
+            </div>
           </div>
 
           {/* Mobile Close Button */}
           {onCloseMobile && (
             <button
               onClick={onCloseMobile}
-              className="md:hidden p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center -mr-1"
+              className="md:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center -mr-1"
               aria-label="Tutup panel"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
         {/* Rentang Waktu (Saat Ini, 12 Jam Lalu, 1 Hari, 7 Hari, 30 Hari) */}
-        <div className="mt-3 pt-2.5 border-t border-slate-800/80">
-          <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold uppercase tracking-wider mb-1.5">
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-3 h-3 text-orange-400" />
-              <span>Rentang Waktu Deteksi</span>
+        <div className="mt-2 pt-2 border-t border-slate-800/80">
+          <div className="flex items-center justify-between text-[9px] text-slate-400 font-semibold uppercase tracking-wider mb-1">
+            <div className="flex items-center gap-1">
+              <Clock className="w-2.5 h-2.5 text-orange-400" />
+              <span>Rentang Waktu</span>
             </div>
             {isLoading && (
-              <span className="text-[10px] text-orange-400 flex items-center gap-1">
-                <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+              <span className="text-[9px] text-orange-400 flex items-center gap-1">
+                <RefreshCw className="w-2 h-2 animate-spin" />
                 Memuat...
               </span>
             )}
           </div>
           
-          <div className="space-y-1.5 bg-slate-950/80 p-1.5 rounded-xl border border-slate-800">
+          <div className="space-y-1 bg-slate-950/90 p-1 rounded-lg border border-slate-800">
             {/* Real-time / Hourly row */}
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-1">
               <button
                 onClick={() => onTimeRangeChange("now")}
                 disabled={isLoading}
                 className={cn(
-                  "py-1.5 px-2 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1.5 select-none min-h-[34px]",
+                  "py-1 px-1.5 text-[11px] font-bold rounded-md transition-all text-center flex items-center justify-center gap-1 select-none min-h-[28px]",
                   timeRange === "now"
-                    ? "bg-red-600 text-white shadow-md shadow-red-950/50"
+                    ? "bg-red-600 text-white shadow-sm"
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/70"
                 )}
                 title="Deteksi Satelit Real-time / Saat Ini"
               >
-                <Radio className={cn("w-3 h-3 shrink-0", timeRange === "now" ? "text-white animate-pulse" : "text-red-400")} />
+                <Radio className={cn("w-2.5 h-2.5 shrink-0", timeRange === "now" ? "text-white animate-pulse" : "text-red-400")} />
                 <span>Saat Ini</span>
-                <span className="text-[9px] px-1 py-0.2 bg-red-950 text-red-200 rounded font-mono border border-red-500/30">LIVE</span>
+                <span className="text-[8px] px-1 py-0.1 bg-red-950 text-red-200 rounded font-mono border border-red-500/30">LIVE</span>
               </button>
 
               <button
                 onClick={() => onTimeRangeChange("12h")}
                 disabled={isLoading}
                 className={cn(
-                  "py-1.5 px-2 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1.5 select-none min-h-[34px]",
+                  "py-1 px-1.5 text-[11px] font-bold rounded-md transition-all text-center flex items-center justify-center gap-1 select-none min-h-[28px]",
                   timeRange === "12h"
-                    ? "bg-orange-600 text-white shadow-md shadow-orange-950/50"
+                    ? "bg-orange-600 text-white shadow-sm"
                     : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/70"
                 )}
                 title="Deteksi 12 Jam Terakhir"
               >
-                <Clock className="w-3 h-3 text-orange-400 shrink-0" />
+                <Clock className="w-2.5 h-2.5 text-orange-400 shrink-0" />
                 <span>12 Jam Lalu</span>
               </button>
             </div>
@@ -242,14 +227,14 @@ export default function Sidebar({
                   onClick={() => onTimeRangeChange(days)}
                   disabled={isLoading}
                   className={cn(
-                    "py-1.5 px-1.5 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1 select-none min-h-[32px]",
+                    "py-1 px-1 text-[10px] font-bold rounded-md transition-all text-center flex items-center justify-center gap-0.5 select-none min-h-[26px]",
                     timeRange === days
-                      ? "bg-orange-600 text-white shadow-md shadow-orange-950/50"
+                      ? "bg-orange-600 text-white shadow-sm"
                       : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/70"
                   )}
                 >
                   <span>{days} Hari</span>
-                  {days === 1 && <span className="text-[9px] opacity-75 font-normal">lalu</span>}
+                  {days === 1 && <span className="text-[8px] opacity-75 font-normal">lalu</span>}
                 </button>
               ))}
             </div>
@@ -257,14 +242,14 @@ export default function Sidebar({
         </div>
       </div>
       
-      {/* Hotspots List */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 overscroll-contain">
+      {/* Hotspots List - Slim & Compact */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2 overscroll-contain">
         <AnimatePresence>
           {hotspots.length === 0 ? (
-            <div className="text-center py-12 px-4 text-slate-500">
-              <ShieldAlert className="w-12 h-12 mx-auto mb-3 opacity-25" />
-              <p className="text-sm font-medium text-slate-400">Tidak ada titik api</p>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+            <div className="text-center py-10 px-3 text-slate-500">
+              <ShieldAlert className="w-10 h-10 mx-auto mb-2 opacity-25" />
+              <p className="text-xs font-medium text-slate-400">Tidak ada titik api</p>
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
                 Area konsesi IUPK dan koridor pengamanan bebas dari anomali termal dalam rentang {getTimeRangeDescription(timeRange)}.
               </p>
             </div>
@@ -277,29 +262,29 @@ export default function Sidebar({
               return (
                 <motion.div
                   key={hotspot.id}
-                  initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                  initial={{ opacity: 0, y: -8, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   onClick={() => onSelectHotspot?.(hotspot)}
                   className={cn(
-                    "p-3.5 rounded-xl relative overflow-hidden transition-all cursor-pointer select-none",
+                    "p-2.5 rounded-lg relative overflow-hidden transition-all cursor-pointer select-none",
                     isToday 
                       ? "bg-red-500/10 border border-red-500/30 hover:border-red-500/60" 
                       : "bg-orange-500/10 border border-orange-500/30 hover:border-orange-500/60 opacity-90",
-                    isSelected && "ring-2 ring-blue-500 border-transparent shadow-lg bg-slate-800/80"
+                    isSelected && "ring-2 ring-blue-500 border-transparent shadow-md bg-slate-800/80"
                   )}
                 >
-                  <div className="flex justify-between items-start mb-1.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="flex items-center gap-1">
                       <span className={cn(
-                        "text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-wider",
+                        "text-[9px] font-bold px-1.5 py-0.5 rounded text-white uppercase tracking-wider",
                         isToday ? "bg-red-600" : "bg-orange-600"
                       )}>
                         {formatHotspotRelativeTime(hotspot.detectedAt, hotspot.daysAgo)}
                       </span>
                     </div>
                     <span className={cn(
-                      "text-xs font-mono font-semibold",
+                      "text-[11px] font-mono font-semibold",
                       isToday ? "text-red-400" : "text-orange-400"
                     )}>
                       {hotspot.confidence}% Conf.
@@ -307,78 +292,81 @@ export default function Sidebar({
                   </div>
 
                   {/* Date & Time display */}
-                  <div className="flex items-center gap-1 text-[11px] text-slate-400 mb-1.5 font-mono">
-                    <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-1 font-mono">
+                    <Clock className="w-2.5 h-2.5 text-slate-500 shrink-0" />
                     <span>
                       {formatDateWITA(new Date(hotspot.detectedAt))} • {formatTimeWITA(new Date(hotspot.detectedAt))}
                     </span>
                   </div>
 
-                  <div className="text-sm font-semibold mb-1 flex items-center gap-1.5 text-slate-100">
-                    <Flame className={cn("w-4 h-4 shrink-0", isToday ? "text-red-500" : "text-orange-500")} />
-                    <span>ID: {hotspot.id.toUpperCase()}</span>
+                  <div className="text-xs font-semibold mb-1 flex items-center gap-1 text-slate-100">
+                    <Flame className={cn("w-3.5 h-3.5 shrink-0", isToday ? "text-red-500" : "text-orange-500")} />
+                    <span className="truncate">ID: {hotspot.id.toUpperCase()}</span>
                   </div>
 
                   {/* Satellite Source Indicator */}
-                  <div className="flex items-center gap-1.5 text-[11px] text-slate-300 mb-2 bg-slate-900/90 border border-slate-800/90 px-2 py-1.5 rounded-lg">
-                    <Satellite className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                    <span className="text-slate-400 font-semibold shrink-0">Sumber:</span>
-                    <span className="text-slate-200 font-medium truncate" title={hotspot.source || "Multi-Satelit Terpadu"}>
-                      {hotspot.source || "Multi-Satelit (Jepang / SiPongi / BRIN / BMKG)"}
+                  <div className="flex items-center gap-1 text-[10px] text-slate-300 mb-1.5 bg-slate-900/90 border border-slate-800 px-1.5 py-1 rounded">
+                    <Satellite className="w-3 h-3 text-cyan-400 shrink-0" />
+                    <span className="text-slate-400 font-medium shrink-0">Sumber:</span>
+                    <span className="text-slate-200 truncate" title={hotspot.source || "Multi-Satelit Terpadu"}>
+                      {hotspot.source || "Multi-Satelit"}
                     </span>
                   </div>
-                  <div className="text-[11px] font-mono mt-2 flex items-center justify-between">
+
+                  <div className="text-[10px] font-mono mt-1 flex items-center justify-between">
                     <a 
                       href={`https://www.google.com/maps/search/?api=1&query=${hotspot.location.lat},${hotspot.location.lng}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-2 py-1 rounded transition-colors inline-block"
+                      className="text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded transition-colors inline-block"
                       title="Buka di Google Maps"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      Lat: {hotspot.location.lat.toFixed(5)} | Lon: {hotspot.location.lng.toFixed(5)}
+                      {hotspot.location.lat.toFixed(4)}, {hotspot.location.lng.toFixed(4)}
                     </a>
                     
-                    <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                      <MapPin className="w-3 h-3 text-blue-400" />
-                      Fokus peta
+                    <span className="text-[9px] text-slate-500 flex items-center gap-0.5">
+                      <MapPin className="w-2.5 h-2.5 text-blue-400" />
+                      Fokus
                     </span>
                   </div>
 
                   <SidebarAddress lat={hotspot.location.lat} lng={hotspot.location.lng} initialAddress={hotspot.address} />
 
-                  <div className="mt-3 flex flex-col gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSendWA(hotspot);
-                      }}
-                      disabled={sendingWaId === hotspot.id}
-                      className="w-full min-h-[40px] py-2 px-3 bg-green-500/10 hover:bg-green-500/20 active:bg-green-500/30 border border-green-500/30 rounded-lg text-xs font-bold transition-colors flex items-center justify-center text-green-400 group touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {sendingWaId === hotspot.id ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <MessageCircle className="w-4 h-4 mr-2" />
-                      )}
-                      <span>Kirim Manual ke WA</span>
-                    </button>
-                    
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSendTelegram(hotspot);
-                      }}
-                      disabled={sendingTgId === hotspot.id}
-                      className="w-full min-h-[40px] py-2 px-3 bg-blue-500/10 hover:bg-blue-500/20 active:bg-blue-500/30 border border-blue-500/30 rounded-lg text-xs font-bold transition-colors flex items-center justify-center text-blue-400 group touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {sendingTgId === hotspot.id ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4 mr-2" />
-                      )}
-                      <span>Kirim Manual ke Telegram</span>
-                    </button>
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSendWA(hotspot);
+                        }}
+                        disabled={sendingWaId === hotspot.id}
+                        className="py-1 px-1.5 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded text-[10px] font-bold transition-colors flex items-center justify-center text-green-400 disabled:opacity-50 min-h-[30px]"
+                      >
+                        {sendingWaId === hotspot.id ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <MessageCircle className="w-3 h-3 mr-1" />
+                        )}
+                        <span>Kirim WA</span>
+                      </button>
+                      
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSendTelegram(hotspot);
+                        }}
+                        disabled={sendingTgId === hotspot.id}
+                        className="py-1 px-1.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded text-[10px] font-bold transition-colors flex items-center justify-center text-blue-400 disabled:opacity-50 min-h-[30px]"
+                      >
+                        {sendingTgId === hotspot.id ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <Send className="w-3 h-3 mr-1" />
+                        )}
+                        <span>Kirim TG</span>
+                      </button>
+                    </div>
 
                     {isNew && (
                       <button
@@ -386,9 +374,9 @@ export default function Sidebar({
                           e.stopPropagation();
                           onAcknowledge(hotspot.id);
                         }}
-                        className="w-full min-h-[40px] py-2 px-3 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center text-slate-200 group touch-manipulation"
+                        className="w-full py-1 px-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 rounded text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center text-slate-200 group min-h-[28px]"
                       >
-                        <CheckCircle className="w-4 h-4 mr-2 text-emerald-400 group-hover:scale-110 transition-transform" />
+                        <CheckCircle className="w-3 h-3 mr-1.5 text-emerald-400 group-hover:scale-110 transition-transform" />
                         Konfirmasi Ancaman
                       </button>
                     )}
@@ -400,20 +388,20 @@ export default function Sidebar({
         </AnimatePresence>
       </div>
       
-      {/* Sidebar Footer */}
-      <div className="p-3.5 sm:p-4 bg-slate-900 border-t border-slate-800 shrink-0">
-        <div className="text-[11px] text-slate-400 mb-2 flex items-center justify-between">
+      {/* Sidebar Footer - Compact */}
+      <div className="p-2 sm:p-2.5 bg-slate-900 border-t border-slate-800 shrink-0">
+        <div className="text-[10px] text-slate-400 mb-1.5 flex items-center justify-between">
           <span>Status Sistem ({getTimeRangeLabel(timeRange)})</span>
           <span className="text-emerald-400 font-semibold flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            Terkoneksi ESDM & NASA
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Terkoneksi
           </span>
         </div>
         <button 
           onClick={onOpenPrintPreview}
-          className="w-full min-h-[44px] py-2.5 px-4 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors text-white flex items-center justify-center touch-manipulation"
+          className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 rounded-md text-[11px] font-bold uppercase tracking-wider transition-colors text-white flex items-center justify-center min-h-[36px]"
         >
-          Cetak Ringkasan Sebaran Hotspot
+          Cetak Ringkasan Sebaran
         </button>
       </div>
     </div>

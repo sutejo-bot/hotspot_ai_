@@ -332,9 +332,9 @@ export default function App() {
           />
         )}
 
-        {/* Sidebar (Drawer on mobile, standard column on desktop) */}
+        {/* Sidebar (Drawer on mobile, slim column on desktop for maximal map space) */}
         <aside className={`
-          fixed inset-y-0 left-0 z-50 w-[85vw] max-w-sm transform transition-transform duration-300 ease-in-out md:static md:w-80 lg:w-88 md:translate-x-0 md:z-10 shrink-0
+          fixed inset-y-0 left-0 z-50 w-[85vw] max-w-[300px] transform transition-transform duration-300 ease-in-out md:static md:w-[290px] lg:w-[295px] md:translate-x-0 md:z-10 shrink-0
           ${isMobileSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}
         `}>
           <Sidebar 

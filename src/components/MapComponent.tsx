@@ -256,7 +256,7 @@ export default function MapComponent({
   const [showBuffer, setShowBuffer] = useState(true);
   const [showHotspots, setShowHotspots] = useState(true);
   const [showAdmin, setShowAdmin] = useState(true);
-  const [mapType, setMapType] = useState<"street" | "satellite">("street");
+  const [mapType, setMapType] = useState<"street" | "satellite" | "esri">("satellite");
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const [alertDismissed, setAlertDismissed] = useState(false);
   const [focusMode, setFocusMode] = useState<"full" | "mine" | "kelanis" | "none">("full");
@@ -268,6 +268,8 @@ export default function MapComponent({
   const [isWeatherModalOpen, setIsWeatherModalOpen] = useState<boolean>(false);
   const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
   const [showWeatherRadar, setShowWeatherRadar] = useState<boolean>(false);
+  const [weatherOverlayMode, setWeatherOverlayMode] = useState<"radar" | "satellite" | "both">("radar");
+  const [radarOpacity, setRadarOpacity] = useState<number>(0.72);
   const [showWindFlow, setShowWindFlow] = useState<boolean>(false);
   const [radarMetadata, setRadarMetadata] = useState<RainViewerMetadata | null>(null);
 
@@ -375,27 +377,29 @@ export default function MapComponent({
 
         {mapType === "street" ? (
           <TileLayer
+            key="basemap-street"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxNativeZoom={19}
             maxZoom={20}
           />
+        ) : mapType === "esri" ? (
+          <TileLayer
+            key="basemap-esri"
+            attribution='&copy; Esri World Imagery'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxNativeZoom={17}
+            maxZoom={20}
+          />
         ) : (
-          <>
-            <TileLayer
-              attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-              maxNativeZoom={17}
-              maxZoom={20}
-            />
-            {/* CartoDB Voyager Label overlay for highly detailed OSM Indonesian village names */}
-            <TileLayer
-              attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
-              url="https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
-              maxNativeZoom={19}
-              maxZoom={20}
-            />
-          </>
+          <TileLayer
+            key="basemap-satellite-google"
+            attribution='&copy; Google Maps Satelit Hybrid'
+            url="https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+            subdomains={["0", "1", "2", "3"]}
+            maxNativeZoom={20}
+            maxZoom={20}
+          />
         )}
 
         {/* Overlay Label & Batas Administrasi Wilayah (Desa, Kecamatan, Kabupaten) */}
@@ -405,7 +409,7 @@ export default function MapComponent({
             url="https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
             opacity={0.9}
             maxNativeZoom={19}
-            maxZoom={20}
+            maxZoom={21}
           />
         )}
 
@@ -620,13 +624,27 @@ export default function MapComponent({
           </Marker>
         ))}
 
-        {/* 8. Live Weather Radar Layer (BMKG / Himawari-9 Satellite Clouds & Rain) */}
-        {showWeatherRadar && radarMetadata && (
+        {/* 8. Live Weather Radar Layer (BMKG / RainViewer) with maxNativeZoom={7} to prevent 'zoom not supported' */}
+        {showWeatherRadar && radarMetadata?.radarPath && (weatherOverlayMode === "radar" || weatherOverlayMode === "both") && (
           <TileLayer
             key={`radar-${radarMetadata.radarPath}`}
             url={`${radarMetadata.host}${radarMetadata.radarPath}/256/{z}/{x}/{y}/2/1_1.png`}
-            opacity={0.65}
-            zIndex={400}
+            opacity={radarOpacity}
+            zIndex={450}
+            maxNativeZoom={7}
+            maxZoom={20}
+          />
+        )}
+
+        {/* 8b. Himawari-9 Geostationary Satellite Infrared Cloud Layer with maxNativeZoom={7} */}
+        {showWeatherRadar && radarMetadata?.satellitePath && (weatherOverlayMode === "satellite" || weatherOverlayMode === "both") && (
+          <TileLayer
+            key={`sat-${radarMetadata.satellitePath}`}
+            url={`${radarMetadata.satelliteHost || "https://api.librewxr.net"}${radarMetadata.satellitePath}/256/{z}/{x}/{y}/0/0_0.png`}
+            opacity={weatherOverlayMode === "both" ? radarOpacity * 0.75 : radarOpacity}
+            zIndex={440}
+            maxNativeZoom={7}
+            maxZoom={20}
           />
         )}
 
@@ -719,24 +737,65 @@ export default function MapComponent({
       </div>
 
       {/* TOP RIGHT: True North Compass (Kompas Orientasi Peta) */}
-      <CompassRose
-        onResetOrientation={() => {
-          setFocusMode("full");
-        }}
-        className="absolute top-4 right-4 z-[1000]"
-      />
+      <div 
+        className="absolute top-3 right-3 sm:top-4 sm:right-4 z-[1200] pointer-events-auto shadow-2xl rounded-2xl"
+        style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 1200 }}
+      >
+        <CompassRose
+          onResetOrientation={() => {
+            setFocusMode("full");
+          }}
+        />
+      </div>
 
-      {/* Weather Radar Legend (shown when Radar layer is active) */}
+      {/* Weather Radar Legend (shown when Radar/Satellite layer is active) */}
       {showWeatherRadar && (
-        <div className="absolute bottom-6 left-4 sm:left-14 z-[1000] bg-slate-900/90 backdrop-blur-md border border-slate-700 p-2.5 rounded-xl shadow-xl text-xs text-slate-200">
-          <div className="flex items-center gap-2 mb-1.5 font-bold text-[11px] text-blue-400">
-            <Satellite className="w-3.5 h-3.5" />
-            <span>Radar Hujan & Awan Satelit (Himawari-9 / BMKG)</span>
+        <div className="absolute bottom-6 left-4 sm:left-14 z-[1000] bg-slate-900/95 backdrop-blur-md border border-slate-700/80 p-2.5 rounded-xl shadow-2xl text-xs text-slate-200 min-w-[250px]">
+          <div className="flex items-center justify-between gap-2 mb-1.5 font-bold text-[11px] text-blue-400">
+            <div className="flex items-center gap-1.5">
+              <Satellite className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+              <span>
+                {weatherOverlayMode === "satellite"
+                  ? "Satelit Himawari-9 (Awan IR)"
+                  : weatherOverlayMode === "both"
+                  ? "Radar Hujan + Himawari-9"
+                  : "Radar Hujan Live (Presipitasi)"}
+              </span>
+            </div>
+            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/30">
+              Live WITA
+            </span>
           </div>
-          <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-300">
-            <span className="text-slate-400">Ringan</span>
-            <div className="h-2 w-28 rounded-full bg-gradient-to-r from-cyan-400 via-green-400 via-yellow-400 to-red-600"></div>
-            <span className="text-slate-400">Lebat / Badai</span>
+
+          {weatherOverlayMode !== "satellite" ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-300">
+                <span className="text-slate-400">Gerimis</span>
+                <div className="h-2 flex-1 rounded-full bg-gradient-to-r from-cyan-400 via-green-400 via-yellow-400 to-red-600"></div>
+                <span className="text-slate-400">Lebat / Badai</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-300">
+                <span className="text-slate-400">Cerah</span>
+                <div className="h-2 flex-1 rounded-full bg-gradient-to-r from-slate-800 via-slate-500 via-slate-300 to-white"></div>
+                <span className="text-slate-400">Awan Tebal / CB</span>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-1.5 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[9px] text-slate-400 font-mono">
+            <span>Resolusi Adaptif (Auto-Scaled HD)</span>
+            <button
+              onClick={() => {
+                fetchRainViewerRadar().then((meta) => meta && setRadarMetadata(meta));
+              }}
+              className="text-blue-400 hover:text-blue-300 cursor-pointer underline"
+              title="Perbarui data radar"
+            >
+              Update
+            </button>
           </div>
         </div>
       )}
@@ -762,37 +821,37 @@ export default function MapComponent({
       />
 
       {/* Floating Layer Controls (Mobile Friendly Toggle) */}
-      <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-[1000] flex flex-col items-end">
-        {/* Expanded Panel */}
+      <div className="absolute bottom-3 right-3 sm:bottom-5 sm:right-5 z-[1100] flex flex-col items-end">
+        {/* Expanded Panel - compact & constrained so it never cuts off at top */}
         {showLayerPanel && (
-          <div className="mb-3 bg-slate-900/95 backdrop-blur-md border border-slate-700 p-3.5 sm:p-4 rounded-2xl shadow-2xl w-[280px] sm:w-[310px] max-w-[calc(100vw-32px)] text-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-blue-400" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Peta Sebaran Hotspot</span>
+          <div className="mb-2 bg-slate-900/95 backdrop-blur-md border border-slate-700 p-2.5 sm:p-3 rounded-xl shadow-2xl w-[235px] sm:w-[250px] max-w-[calc(100vw-24px)] text-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100vh-140px)] sm:max-h-[min(480px,calc(100vh-120px))] overflow-y-auto">
+            <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-800">
+              <div className="flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-200">Layer & Basemap</span>
               </div>
               <button 
                 onClick={() => setShowLayerPanel(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 min-h-[32px] min-w-[32px] flex items-center justify-center"
-                aria-label="Close layer panel"
+                className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 min-h-[26px] min-w-[26px] flex items-center justify-center cursor-pointer"
+                aria-label="Tutup panel layer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {/* Quick Navigation on Mobile */}
-            <div className="mb-3 sm:hidden">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Fokus Wilayah</h4>
+            <div className="mb-2 sm:hidden">
+              <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fokus Wilayah</h4>
               <div className="grid grid-cols-3 gap-1">
                 <button
                   onClick={() => setFocusMode("full")}
-                  className="p-1.5 text-[11px] bg-slate-800 hover:bg-slate-700 rounded text-center text-slate-200"
+                  className="py-1 px-1 text-[10px] bg-slate-800 hover:bg-slate-700 rounded text-center text-slate-200"
                 >
                   Semua
                 </button>
                 <button
                   onClick={() => setFocusMode("mine")}
-                  className="p-1.5 text-[11px] bg-slate-800 hover:bg-slate-700 rounded text-center text-slate-200"
+                  className="py-1 px-1 text-[10px] bg-slate-800 hover:bg-slate-700 rounded text-center text-slate-200"
                 >
                   Tambang
                 </button>
@@ -802,7 +861,7 @@ export default function MapComponent({
                     setFocusMode("kelanis");
                     setShowLayerPanel(false);
                   }}
-                  className="p-1.5 text-[11px] bg-slate-800 hover:bg-slate-700 rounded text-center text-slate-200"
+                  className="py-1 px-1 text-[10px] bg-slate-800 hover:bg-slate-700 rounded text-center text-slate-200"
                 >
                   Kelanis
                 </button>
@@ -810,151 +869,227 @@ export default function MapComponent({
             </div>
 
             {/* Basemap Options */}
-            <div className="mb-3.5">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Peta Dasar (Basemap)</h4>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="mb-2.5">
+              <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Peta Dasar (Basemap)</h4>
+              <div className="grid grid-cols-3 gap-1">
                 <button 
                   onClick={() => setMapType('street')}
-                  className={`min-h-[40px] px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center justify-center gap-1.5 ${
+                  className={`py-1 px-1.5 text-[11px] font-semibold rounded-lg border transition-all flex items-center justify-center min-h-[30px] cursor-pointer ${
                     mapType === 'street' 
-                      ? 'bg-blue-600 border-blue-500 text-white shadow-md' 
-                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750'
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-sm' 
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
                   }`}
+                  title="Peta Jalan Standar OpenStreetMap"
                 >
                   Street
                 </button>
                 <button 
                   onClick={() => setMapType('satellite')}
-                  className={`min-h-[40px] px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex items-center justify-center gap-1.5 ${
+                  className={`py-1 px-1.5 text-[11px] font-semibold rounded-lg border transition-all flex items-center justify-center min-h-[30px] cursor-pointer ${
                     mapType === 'satellite' 
-                      ? 'bg-blue-600 border-blue-500 text-white shadow-md' 
-                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750'
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-sm' 
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
                   }`}
+                  title="Satelit Hybrid Google (Tajam & Ada Label)"
                 >
-                  Satelit
+                  Satelit HD
+                </button>
+                <button 
+                  onClick={() => setMapType('esri')}
+                  className={`py-1 px-1.5 text-[11px] font-semibold rounded-lg border transition-all flex items-center justify-center min-h-[30px] cursor-pointer ${
+                    mapType === 'esri' 
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-sm' 
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                  }`}
+                  title="Satelit Esri ArcGIS (Alternatif)"
+                >
+                  Esri
                 </button>
               </div>
             </div>
 
             {/* Layers Checklist Matching PDF */}
             <div>
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Layer Peta</h4>
-              <div className="space-y-1">
-                <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+              <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Layer Peta</h4>
+              <div className="space-y-0.5">
+                <label className="flex items-center gap-2 py-1 px-1.5 rounded-md hover:bg-slate-800/70 text-[11px] text-slate-200 cursor-pointer select-none min-h-[28px]">
                   <input 
                     type="checkbox" 
                     checked={showIupk} 
                     onChange={(e) => setShowIupk(e.target.checked)} 
-                    className="accent-blue-500 w-4 h-4 rounded cursor-pointer" 
+                    className="accent-blue-500 w-3.5 h-3.5 rounded cursor-pointer shrink-0" 
                   /> 
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-0.5 bg-black inline-block"></span>
-                    Batas IUPK Produksi AI (ESDM)
+                  <span className="flex items-center gap-1.5 truncate">
+                    <span className="w-3 h-0.5 bg-black inline-block shrink-0"></span>
+                    <span>Batas IUPK AI (ESDM)</span>
                   </span>
                 </label>
 
-                <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+                <label className="flex items-center gap-2 py-1 px-1.5 rounded-md hover:bg-slate-800/70 text-[11px] text-slate-200 cursor-pointer select-none min-h-[28px]">
                   <input 
                     type="checkbox" 
                     checked={showHaulRoad} 
                     onChange={(e) => setShowHaulRoad(e.target.checked)} 
-                    className="accent-amber-500 w-4 h-4 rounded cursor-pointer" 
+                    className="accent-amber-500 w-3.5 h-3.5 rounded cursor-pointer shrink-0" 
                   /> 
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-1 rounded-sm bg-slate-400 inline-block"></span>
-                    Jalan Hauling (KM 0 - KM 71)
+                  <span className="flex items-center gap-1.5 truncate">
+                    <span className="w-3 h-1 rounded-sm bg-slate-400 inline-block shrink-0"></span>
+                    <span>Jalan Hauling (KM 0-71)</span>
                   </span>
                 </label>
 
                 {showHaulRoad && (
-                  <label className="flex items-center gap-2.5 py-1.5 px-2 ml-4 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[34px] select-none">
+                  <label className="flex items-center gap-2 py-0.5 px-1.5 ml-3 rounded-md hover:bg-slate-800/70 text-[10px] text-amber-200/90 cursor-pointer select-none min-h-[24px]">
                     <input 
                       type="checkbox" 
                       checked={showMilestones} 
                       onChange={(e) => setShowMilestones(e.target.checked)} 
-                      className="accent-amber-500 w-3.5 h-3.5 rounded cursor-pointer" 
+                      className="accent-amber-500 w-3 h-3 rounded cursor-pointer shrink-0" 
                     /> 
-                    <span className="flex items-center gap-2 text-[11px] text-amber-200/90">
-                      <span className="w-2 h-2 rounded-full border border-amber-400 bg-amber-400/80 inline-block"></span>
-                      Penanda KM (Per 1 Km)
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full border border-amber-400 bg-amber-400 inline-block shrink-0"></span>
+                      <span>Penanda Tiap KM</span>
                     </span>
                   </label>
                 )}
 
-                <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+                <label className="flex items-center gap-2 py-1 px-1.5 rounded-md hover:bg-slate-800/70 text-[11px] text-slate-200 cursor-pointer select-none min-h-[28px]">
                   <input 
                     type="checkbox" 
                     checked={showBuffer} 
                     onChange={(e) => setShowBuffer(e.target.checked)} 
-                    className="accent-amber-500 w-4 h-4 rounded cursor-pointer" 
+                    className="accent-amber-500 w-3.5 h-3.5 rounded cursor-pointer shrink-0" 
                   /> 
-                  <span className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-yellow-400/80 inline-block"></span>
-                    Buffer Zone 1 Km
+                  <span className="flex items-center gap-1.5 truncate">
+                    <span className="w-2.5 h-2.5 rounded-full bg-yellow-400/80 inline-block shrink-0"></span>
+                    <span>Buffer Zone 1 Km</span>
                   </span>
                 </label>
 
-                <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+                <label className="flex items-center gap-2 py-1 px-1.5 rounded-md hover:bg-slate-800/70 text-[11px] text-slate-200 cursor-pointer select-none min-h-[28px]">
                   <input 
                     type="checkbox" 
                     checked={showAdmin} 
                     onChange={(e) => setShowAdmin(e.target.checked)} 
-                    className="accent-slate-500 w-4 h-4 rounded cursor-pointer" 
+                    className="accent-slate-500 w-3.5 h-3.5 rounded cursor-pointer shrink-0" 
                   /> 
-                  <span className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-sm border-2 border-white inline-block"></span>
-                    Batas Wilayah Administrasi (BIG)
+                  <span className="flex items-center gap-1.5 truncate">
+                    <span className="w-2.5 h-2.5 rounded-sm border-2 border-white inline-block shrink-0"></span>
+                    <span>Batas Wilayah BIG</span>
                   </span>
                 </label>
 
-                <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+                <label className="flex items-center gap-2 py-1 px-1.5 rounded-md hover:bg-slate-800/70 text-[11px] text-slate-200 cursor-pointer select-none min-h-[28px]">
                   <input 
                     type="checkbox" 
                     checked={showHotspots} 
                     onChange={(e) => setShowHotspots(e.target.checked)} 
-                    className="accent-red-500 w-4 h-4 rounded cursor-pointer" 
+                    className="accent-red-500 w-3.5 h-3.5 rounded cursor-pointer shrink-0" 
                   /> 
-                  <span className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
-                    Titik Api (Thermal Hotspots)
+                  <span className="flex items-center gap-1.5 truncate">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block shrink-0"></span>
+                    <span>Titik Api (Hotspots)</span>
                   </span>
                 </label>
               </div>
 
               {/* Weather & Satellite Layer Controls */}
-              <div className="pt-2.5 mt-2.5 border-t border-slate-800">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+              <div className="pt-2 mt-2 border-t border-slate-800">
+                <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Overlay Cuaca & Satelit
                 </h4>
                 <div className="space-y-1">
-                  <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
-                    <input 
-                      type="checkbox" 
-                      checked={showWeatherRadar} 
-                      onChange={(e) => {
-                        setShowWeatherRadar(e.target.checked);
-                        if (e.target.checked && !radarMetadata) {
-                          fetchRainViewerRadar().then((meta) => meta && setRadarMetadata(meta));
-                        }
-                      }} 
-                      className="accent-blue-500 w-4 h-4 rounded cursor-pointer" 
-                    /> 
-                    <span className="flex items-center gap-2">
-                      <Satellite className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Radar Hujan & Awan (Himawari-9)</span>
-                    </span>
-                  </label>
+                  <div className="bg-slate-800/50 rounded-lg p-1.5 border border-slate-700/60">
+                    <label className="flex items-center justify-between gap-2 text-[11px] text-slate-200 cursor-pointer select-none">
+                      <span className="flex items-center gap-1.5 font-semibold">
+                        <Satellite className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span>Radar Hujan & Awan Himawari</span>
+                      </span>
+                      <input 
+                        type="checkbox" 
+                        checked={showWeatherRadar} 
+                        onChange={(e) => {
+                          setShowWeatherRadar(e.target.checked);
+                          if (e.target.checked && !radarMetadata) {
+                            fetchRainViewerRadar().then((meta) => meta && setRadarMetadata(meta));
+                          }
+                        }} 
+                        className="accent-blue-500 w-3.5 h-3.5 rounded cursor-pointer shrink-0" 
+                      /> 
+                    </label>
 
-                  <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+                    {showWeatherRadar && (
+                      <div className="mt-2 pt-2 border-t border-slate-700/60 space-y-1.5">
+                        <div className="text-[9px] text-slate-400 font-semibold uppercase">Pilihan Lapisan:</div>
+                        <div className="grid grid-cols-3 gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setWeatherOverlayMode("radar")}
+                            className={`py-1 px-1 text-[10px] font-semibold rounded border transition-all cursor-pointer ${
+                              weatherOverlayMode === "radar"
+                                ? "bg-blue-600 border-blue-400 text-white"
+                                : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                            }`}
+                            title="Presipitasi / Curah Hujan Real-Time"
+                          >
+                            Radar Hujan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWeatherOverlayMode("satellite")}
+                            className={`py-1 px-1 text-[10px] font-semibold rounded border transition-all cursor-pointer ${
+                              weatherOverlayMode === "satellite"
+                                ? "bg-blue-600 border-blue-400 text-white"
+                                : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                            }`}
+                            title="Citra Awan Inframerah Satelit Himawari-9"
+                          >
+                            Himawari IR
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWeatherOverlayMode("both")}
+                            className={`py-1 px-1 text-[10px] font-semibold rounded border transition-all cursor-pointer ${
+                              weatherOverlayMode === "both"
+                                ? "bg-blue-600 border-blue-400 text-white"
+                                : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                            }`}
+                            title="Tampilkan Radar Hujan Sekaligus Citra Awan Satelit"
+                          >
+                            Kombinasi
+                          </button>
+                        </div>
+
+                        {/* Opacity slider */}
+                        <div className="flex items-center justify-between gap-1.5 pt-1">
+                          <span className="text-[9px] text-slate-400">Opasitas:</span>
+                          <input
+                            type="range"
+                            min="0.3"
+                            max="0.95"
+                            step="0.05"
+                            value={radarOpacity}
+                            onChange={(e) => setRadarOpacity(parseFloat(e.target.value))}
+                            className="w-20 accent-blue-500 h-1 bg-slate-700 rounded cursor-pointer"
+                          />
+                          <span className="text-[9px] font-mono text-slate-300 w-6 text-right">
+                            {Math.round(radarOpacity * 100)}%
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <label className="flex items-center gap-2 py-1 px-1.5 rounded-md hover:bg-slate-800/70 text-[11px] text-slate-200 cursor-pointer select-none min-h-[28px]">
                     <input 
                       type="checkbox" 
                       checked={showWindFlow} 
                       onChange={(e) => setShowWindFlow(e.target.checked)} 
-                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer" 
+                      className="accent-emerald-500 w-3.5 h-3.5 rounded cursor-pointer shrink-0" 
                     /> 
-                    <span className="flex items-center gap-2">
-                      <Wind className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Vektor Tiupan Angin Real-Time</span>
+                    <span className="flex items-center gap-1.5 truncate">
+                      <Wind className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>Vektor Tiupan Angin</span>
                     </span>
                   </label>
                 </div>
@@ -966,16 +1101,16 @@ export default function MapComponent({
         {/* Floating Toggle Button */}
         <button
           onClick={() => setShowLayerPanel(!showLayerPanel)}
-          className={`h-12 w-12 sm:h-12 sm:w-auto sm:px-4 rounded-full border shadow-xl flex items-center justify-center gap-2 text-xs font-bold transition-all min-h-[44px] min-w-[44px] active:scale-95 ${
+          className={`h-9 px-3 rounded-full border shadow-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all min-h-[36px] active:scale-95 cursor-pointer ${
             showLayerPanel 
               ? 'bg-blue-600 border-blue-400 text-white' 
               : 'bg-slate-900/90 backdrop-blur-md border-slate-700 text-slate-200 hover:bg-slate-800'
           }`}
-          title="Toggle Layers"
+          title="Pengaturan Layer & Basemap"
           aria-label="Toggle Layers"
         >
-          <Layers className="w-5 h-5" />
-          <span className="hidden sm:inline">Peta & Layer</span>
+          <Layers className="w-4 h-4" />
+          <span>Layer & Peta</span>
         </button>
       </div>
 

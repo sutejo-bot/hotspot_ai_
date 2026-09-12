@@ -398,30 +398,93 @@ function getFallbackWeatherData(station: WeatherStation): StationWeatherData {
   };
 }
 
-// Fetch RainViewer radar metadata for live weather radar tiles
+// Fetch RainViewer & Himawari-9 satellite metadata for live weather radar tiles
 export interface RainViewerMetadata {
   host: string;
   radarPath: string;
   time: number;
+  satellitePath?: string;
+  satelliteHost?: string;
+  satelliteTime?: number;
+  radarProvider?: "rainviewer" | "librewxr";
 }
 
 export async function fetchRainViewerRadar(): Promise<RainViewerMetadata | null> {
+  let radarHost = "https://tilecache.rainviewer.com";
+  let radarPath = "";
+  let radarTime = Math.floor(Date.now() / 1000);
+  let satellitePath = "";
+  let satelliteHost = "https://api.librewxr.net";
+  let satelliteTime = radarTime;
+  let radarProvider: "rainviewer" | "librewxr" = "rainviewer";
+
+  // 1. Fetch RainViewer for live precipitation radar
   try {
-    const res = await fetch("https://api.rainviewer.com/public/weather-maps.json");
-    if (!res.ok) return null;
-    const data = await res.json();
-    const past = data.radar?.past;
-    if (past && past.length > 0) {
-      const latest = past[past.length - 1];
-      return {
-        host: data.host || "https://tilecache.rainviewer.com",
-        radarPath: latest.path,
-        time: latest.time,
-      };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = await res.json();
+      const past = data.radar?.past;
+      if (past && past.length > 0) {
+        const latest = past[past.length - 1];
+        radarHost = data.host || "https://tilecache.rainviewer.com";
+        radarPath = latest.path;
+        radarTime = latest.time;
+      }
+      if (data.satellite?.infrared && data.satellite.infrared.length > 0) {
+        const satLatest = data.satellite.infrared[data.satellite.infrared.length - 1];
+        satellitePath = satLatest.path;
+        satelliteHost = radarHost;
+        satelliteTime = satLatest.time;
+      }
     }
-    return null;
   } catch (e) {
-    console.warn("[Weather Radar] Could not fetch RainViewer tiles metadata:", e);
-    return null;
+    console.warn("[Weather Radar] RainViewer fetch notice:", e);
   }
+
+  // 2. Fetch LibreWXR for Himawari satellite infrared clouds or as fallback radar
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const resLibre = await fetch("https://api.librewxr.net/public/weather-maps.json", {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (resLibre.ok) {
+      const dataLibre = await resLibre.json();
+      if (!satellitePath && dataLibre.satellite?.infrared?.length > 0) {
+        const satLatest = dataLibre.satellite.infrared[dataLibre.satellite.infrared.length - 1];
+        satellitePath = satLatest.path;
+        satelliteHost = dataLibre.host || "https://api.librewxr.net";
+        satelliteTime = satLatest.time;
+      }
+      if (!radarPath && dataLibre.radar?.past?.length > 0) {
+        const radLatest = dataLibre.radar.past[dataLibre.radar.past.length - 1];
+        radarHost = dataLibre.host || "https://api.librewxr.net";
+        radarPath = radLatest.path;
+        radarTime = radLatest.time;
+        radarProvider = "librewxr";
+      }
+    }
+  } catch (e) {
+    console.warn("[Weather Radar] LibreWXR fetch notice:", e);
+  }
+
+  if (radarPath || satellitePath) {
+    return {
+      host: radarHost,
+      radarPath,
+      time: radarTime,
+      satellitePath,
+      satelliteHost,
+      satelliteTime,
+      radarProvider,
+    };
+  }
+
+  return null;
 }
