@@ -31,9 +31,23 @@ import {
   Anchor, 
   MapPin,
   Compass,
-  Maximize2
+  Maximize2,
+  Wind,
+  Satellite
 } from "lucide-react";
 import { renderToString } from "react-dom/server";
+import { CompassRose } from "./CompassRose";
+import { WeatherWidget } from "./WeatherWidget";
+import { WeatherModal } from "./WeatherModal";
+import {
+  fetchStationWeather,
+  fetchRainViewerRadar,
+  RainViewerMetadata,
+  StationWeatherData,
+  WeatherStation,
+  OPERATIONAL_WEATHER_STATIONS,
+  CORRIDOR_WIND_POINTS
+} from "../weatherData";
 
 interface MapComponentProps {
   hotspots: Hotspot[];
@@ -248,6 +262,15 @@ export default function MapComponent({
   const [focusMode, setFocusMode] = useState<"full" | "mine" | "kelanis" | "none">("full");
   const [currentZoom, setCurrentZoom] = useState<number>(10);
 
+  // Weather & Satellite state
+  const [weatherStationsData, setWeatherStationsData] = useState<Record<string, StationWeatherData>>({});
+  const [selectedWeatherStationId, setSelectedWeatherStationId] = useState<string>("kelanis-port");
+  const [isWeatherModalOpen, setIsWeatherModalOpen] = useState<boolean>(false);
+  const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
+  const [showWeatherRadar, setShowWeatherRadar] = useState<boolean>(false);
+  const [showWindFlow, setShowWindFlow] = useState<boolean>(false);
+  const [radarMetadata, setRadarMetadata] = useState<RainViewerMetadata | null>(null);
+
   // Center between Kelanis and Tanjung Tambang
   const initialCenter: [number, number] = [-2.20, 115.20];
   
@@ -290,11 +313,54 @@ export default function MapComponent({
     }
   }, [newHotspots.length]);
 
+  // Load weather data for 3 key operational stations
+  const loadAllWeather = async () => {
+    setWeatherLoading(true);
+    try {
+      const results: Record<string, StationWeatherData> = {};
+      await Promise.all(
+        OPERATIONAL_WEATHER_STATIONS.map(async (stn) => {
+          const data = await fetchStationWeather(stn);
+          results[stn.id] = data;
+        })
+      );
+      setWeatherStationsData(results);
+    } catch (e) {
+      console.error("Error loading weather data:", e);
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAllWeather();
+    // Pre-fetch RainViewer radar metadata in background
+    fetchRainViewerRadar().then((meta) => {
+      if (meta) setRadarMetadata(meta);
+    });
+    // Auto refresh every 10 minutes
+    const timer = setInterval(loadAllWeather, 10 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Helper to determine wind data along the corridor
+  const getWindForPoint = (lng: number) => {
+    if (lng < 115.05) {
+      return weatherStationsData["kelanis-port"]?.current || null;
+    } else if (lng < 115.35) {
+      return weatherStationsData["hauling-km35"]?.current || null;
+    } else {
+      return weatherStationsData["mine-pit-tutupan"]?.current || null;
+    }
+  };
+
   return (
     <div className="w-full h-full relative z-0">
       <MapContainer 
         center={initialCenter} 
         zoom={10} 
+        minZoom={7}
+        maxZoom={20}
         scrollWheelZoom={true}
         className="w-full h-full"
       >
@@ -311,17 +377,23 @@ export default function MapComponent({
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxNativeZoom={19}
+            maxZoom={20}
           />
         ) : (
           <>
             <TileLayer
               attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+              maxNativeZoom={17}
+              maxZoom={20}
             />
             {/* CartoDB Voyager Label overlay for highly detailed OSM Indonesian village names */}
             <TileLayer
               attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
               url="https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+              maxNativeZoom={19}
+              maxZoom={20}
             />
           </>
         )}
@@ -332,6 +404,8 @@ export default function MapComponent({
             attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
             url="https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
             opacity={0.9}
+            maxNativeZoom={19}
+            maxZoom={20}
           />
         )}
 
@@ -545,6 +619,66 @@ export default function MapComponent({
             </Popup>
           </Marker>
         ))}
+
+        {/* 8. Live Weather Radar Layer (BMKG / Himawari-9 Satellite Clouds & Rain) */}
+        {showWeatherRadar && radarMetadata && (
+          <TileLayer
+            key={`radar-${radarMetadata.radarPath}`}
+            url={`${radarMetadata.host}${radarMetadata.radarPath}/256/{z}/{x}/{y}/2/1_1.png`}
+            opacity={0.65}
+            zIndex={400}
+          />
+        )}
+
+        {/* 9. Real-Time Wind Flow Vectors along the Corridor */}
+        {showWindFlow && CORRIDOR_WIND_POINTS.map((pt) => {
+          const wind = getWindForPoint(pt.lng);
+          const speed = wind?.windSpeed ?? 12;
+          const dir = wind?.windDirection ?? 135;
+          const cardinal = wind?.windDirectionCardinal ?? "Tenggara (SE)";
+          
+          return (
+            <Marker
+              key={pt.id}
+              position={[pt.lat, pt.lng]}
+              interactive={true}
+              zIndexOffset={300}
+              icon={L.divIcon({
+                html: `
+                  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; cursor: pointer;">
+                    <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(15, 23, 42, 0.9); border: 1.5px solid #10b981; box-shadow: 0 2px 8px rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;">
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="#34d399" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(${dir}deg); transition: transform 0.4s ease;">
+                        <line x1="12" y1="19" x2="12" y2="5"></line>
+                        <polyline points="5 12 12 5 19 12"></polyline>
+                      </svg>
+                    </div>
+                    <div style="margin-top: 2px; padding: 1px 4px; border-radius: 4px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(52, 211, 153, 0.5); color: #34d399; font-size: 9px; font-weight: 800; font-family: monospace; white-space: nowrap; line-height: 1.1;">
+                      ${speed} km/j
+                    </div>
+                  </div>
+                `,
+                className: "wind-marker-icon",
+                iconSize: [40, 44],
+                iconAnchor: [20, 22],
+              })}
+            >
+              <Tooltip direction="top" offset={[0, -22]} sticky>
+                <div className="p-1 text-xs">
+                  <div className="font-bold text-slate-800 flex items-center justify-between gap-2">
+                    <span>{pt.name}</span>
+                    <span className="text-[10px] text-emerald-600 font-mono font-bold">({speed} km/j)</span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 mt-0.5">
+                    Arah Tiupan: <span className="font-semibold text-slate-800">{cardinal} ({dir}°)</span>
+                  </div>
+                  <div className="text-[10px] text-amber-700 mt-1 pt-1 border-t border-slate-200">
+                    Perambatan asap & lidah api mengarah ke sebaliknya.
+                  </div>
+                </div>
+              </Tooltip>
+            </Marker>
+          );
+        })}
       </MapContainer>
       
       {/* Quick Focus Controls (Top Left under Zoom) */}
@@ -583,6 +717,49 @@ export default function MapComponent({
           <span>Area Kelanis (Port)</span>
         </button>
       </div>
+
+      {/* TOP RIGHT: True North Compass (Kompas Orientasi Peta) */}
+      <CompassRose
+        onResetOrientation={() => {
+          setFocusMode("full");
+        }}
+        className="absolute top-4 right-4 z-[1000]"
+      />
+
+      {/* Weather Radar Legend (shown when Radar layer is active) */}
+      {showWeatherRadar && (
+        <div className="absolute bottom-6 left-4 sm:left-14 z-[1000] bg-slate-900/90 backdrop-blur-md border border-slate-700 p-2.5 rounded-xl shadow-xl text-xs text-slate-200">
+          <div className="flex items-center gap-2 mb-1.5 font-bold text-[11px] text-blue-400">
+            <Satellite className="w-3.5 h-3.5" />
+            <span>Radar Hujan & Awan Satelit (Himawari-9 / BMKG)</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-300">
+            <span className="text-slate-400">Ringan</span>
+            <div className="h-2 w-28 rounded-full bg-gradient-to-r from-cyan-400 via-green-400 via-yellow-400 to-red-600"></div>
+            <span className="text-slate-400">Lebat / Badai</span>
+          </div>
+        </div>
+      )}
+
+      {/* Full Detailed Weather Modal */}
+      <WeatherModal
+        isOpen={isWeatherModalOpen}
+        onClose={() => setIsWeatherModalOpen(false)}
+        stationsData={weatherStationsData}
+        selectedStationId={selectedWeatherStationId}
+        onSelectStation={setSelectedWeatherStationId}
+        onRefresh={loadAllWeather}
+        loading={weatherLoading}
+        onFlyToStation={(stn) => {
+          setFocusMode("none");
+          setTargetFly({
+            lat: stn.lat,
+            lng: stn.lng,
+            zoom: 15,
+            timestamp: Date.now(),
+          });
+        }}
+      />
 
       {/* Floating Layer Controls (Mobile Friendly Toggle) */}
       <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-[1000] flex flex-col items-end">
@@ -743,6 +920,45 @@ export default function MapComponent({
                   </span>
                 </label>
               </div>
+
+              {/* Weather & Satellite Layer Controls */}
+              <div className="pt-2.5 mt-2.5 border-t border-slate-800">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Overlay Cuaca & Satelit
+                </h4>
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={showWeatherRadar} 
+                      onChange={(e) => {
+                        setShowWeatherRadar(e.target.checked);
+                        if (e.target.checked && !radarMetadata) {
+                          fetchRainViewerRadar().then((meta) => meta && setRadarMetadata(meta));
+                        }
+                      }} 
+                      className="accent-blue-500 w-4 h-4 rounded cursor-pointer" 
+                    /> 
+                    <span className="flex items-center gap-2">
+                      <Satellite className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Radar Hujan & Awan (Himawari-9)</span>
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 py-1.5 px-2 rounded-lg hover:bg-slate-800/60 text-xs text-slate-200 cursor-pointer min-h-[38px] select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={showWindFlow} 
+                      onChange={(e) => setShowWindFlow(e.target.checked)} 
+                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer" 
+                    /> 
+                    <span className="flex items-center gap-2">
+                      <Wind className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Vektor Tiupan Angin Real-Time</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -765,7 +981,7 @@ export default function MapComponent({
 
       {/* Emergency Alert Banner */}
       {showHotspots && newHotspots.length > 0 && !alertDismissed && (
-        <div className="absolute top-3 inset-x-3 sm:inset-x-auto sm:right-4 sm:top-4 sm:max-w-sm bg-red-600/95 backdrop-blur-sm text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl border border-red-400/50 flex items-center gap-3 z-[1000] animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="absolute top-20 inset-x-3 sm:inset-x-auto sm:right-4 sm:top-20 sm:max-w-sm bg-red-600/95 backdrop-blur-sm text-white p-3.5 sm:p-4 rounded-2xl shadow-2xl border border-red-400/50 flex items-center gap-3 z-[1000] animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
             <Flame className="w-6 h-6 text-white animate-pulse" />
           </div>
